@@ -80,12 +80,68 @@ requirements.txt
 ## Status
 
 - [x] **Module 1 — Data Ingestion & Preprocessing**: loaders, join, NLTK cleaning
-  pipeline. All unit tests passing. MovieLens 20M (~27K movies) → ~26.5K successfully joined
+  pipeline. 6/6 unit tests passing. MovieLens 20M (~27K movies) → ~26.5K successfully joined
   to TMDB metadata (98.04% join rate); outputs cached to `data/processed/`.
-- [ ] Module 2 — Classical IR Engine (TF-IDF + Trie)
-- [ ] Module 3 — Adaptive ML Strategy Selection Engine
+- [x] **Module 2 — Classical IR Engine (TF-IDF + Trie)**: TF-IDF vector space model over
+  `text_chunk_clean`, cosine-similarity search, movie-to-movie similarity, and Trie-based
+  title autocomplete. 18/18 unit tests passing.
+- [x] **Module 3 — Adaptive ML Strategy Selection Engine**: per-user profile features,
+  backtest-driven strategy labeling, and a RandomForest classifier predicting
+  content-based / collaborative / popularity per user. 31/31 unit tests passing.
+  Partially effective — see [Module 3 results](#module-3-results) below.
 - [ ] Module 4 — Multi-Objective Hybrid Ranking Engine
 - [ ] Evaluation suite (see `eval_config.yaml` for exact metric names)
+
+**Test suite:** 55/55 passing (`python -m pytest tests/ -q`).
+
+## Running the engines
+
+Both verification scripts need the repo root on the import path:
+
+```bash
+# Module 2 — search, autocomplete, movie-to-movie similarity
+PYTHONPATH=. python scripts/verify_ir_engine.py
+
+# Module 3 — profile features, strategy labeling, classifier training + metrics
+# Optional arg = number of users to sample (default 100)
+PYTHONPATH=. python scripts/verify_strategy_selector.py 5000
+```
+
+The Module 3 script trains and saves the classifier to
+`data/processed/strategy_classifier.pkl`.
+
+## Module 3 results
+
+Measured on a 5,000-user sample (750,512 ratings), 5-split label averaging,
+1,000-user held-out test set:
+
+| Metric | Value |
+|---|---|
+| Accuracy | 0.7960 |
+| Majority-class baseline | 0.8410 |
+| Lift over baseline | −0.0450 |
+| ROC-AUC | 0.6421 |
+| F1 (weighted) | 0.7657 |
+
+Per-class precision against each class's own base rate in the test set:
+
+| Strategy | Support | Base rate | Precision | Ratio |
+|---|---|---|---|---|
+| `collaborative` | 841 | 84.1% | 0.8540 | 1.02× |
+| `content_based` | 70 | 7.0% | 0.2069 | **2.96×** |
+| `popularity` | 89 | 8.9% | 0.1132 | 1.27× |
+
+Read honestly: overall accuracy sits *below* the majority-class baseline, partly by
+design (`class_weight='balanced'` trades majority accuracy for minority recall). The
+model is nonetheless learning real signal — ROC-AUC 0.64 is well above chance, and
+`content_based` predictions land ~3× more often than its base rate would give, though
+with low recall (0.086). `collaborative`'s high raw F1 is mostly majority-class mass,
+not discrimination.
+
+This is **partially effective personalization**, not a solved classification problem.
+Module 4 should therefore treat the predicted strategy as a weighted prior rather than
+a hard routing decision. Full limitation write-up, including the remedies tried and
+rejected, is in [`DATASET_MIGRATION.md`](./DATASET_MIGRATION.md#known-limitations--module-3-adaptive-ml-strategy-selection-engine).
 
 ## Evaluation
 

@@ -15,7 +15,7 @@ diverse, explainable recommendations.
 The system is built as three engines, in this order:
 
 1. **Classical IR Engine** — TF-IDF vector space model over merged movie text
-   (overview + genres + keywords + cast + crew), with cosine similarity search and a
+   (overview + genres + keywords), with cosine similarity search and a
    Trie for title autocomplete.
 2. **Adaptive ML Strategy Selection Engine** — a classifier that predicts, per user,
    which recommendation strategy (content-based, collaborative filtering, or popularity
@@ -26,15 +26,14 @@ The system is built as three engines, in this order:
 
 ## Datasets
 
-- **Primary — [MovieLens ml-latest-small](https://www.kaggle.com/datasets/shubhammehta21/movie-lens-small-latest-dataset)**:
-  ~100K ratings, ~9,700 movies (`ratings.csv`, `movies.csv`, `links.csv`, `tags.csv`).
-- **Secondary — [TMDB 5000](https://www.kaggle.com/datasets/tmdb/tmdb-movie-metadata)**:
-  overview, keywords, genres, cast, crew (`tmdb_5000_movies.csv`, `tmdb_5000_credits.csv`).
-- Joined via `links.csv` (`movieId → tmdbId → TMDB id`), combining real rating history
-  with rich searchable text metadata.
+- **Primary — [MovieLens 20M](https://grouplens.org/datasets/movielens/)**:
+  ~20M ratings, ~27,000 movies (`rating.csv`, `movie.csv`, `link.csv`, `tag.csv`).
+- **Secondary — [TMDB Movies Dataset 2023](https://www.kaggle.com/datasets/asaniczka/tmdb-movies-dataset-2023-930k-movies)**:
+  ~930K movies with overview, keywords, genres (no cast/crew metadata).
+- Joined via `link.csv` (`movieId → tmdbId`), with ~98% join rate between MovieLens and TMDB.
 
-Datasets are not committed to this repo (see `.gitignore`) — download both from Kaggle
-and place them under `data/MovieLens/` and `data/tmdb/` before running the pipeline.
+**Dataset location:** Downloaded files are stored in `newdata/` locally (gitignored — not committed to the repo).
+See [`DATASET_MIGRATION.md`](./DATASET_MIGRATION.md) for dataset rationale and migration notes.
 
 ## Tech stack
 
@@ -43,8 +42,7 @@ Python, VS Code, Pandas, NumPy, Scikit-learn, NLTK, Matplotlib, Claude Code (bui
 ## Project structure
 
 ```
-data/MovieLens/        <- raw MovieLens CSVs (download separately, gitignored)
-data/tmdb/              <- raw TMDB CSVs (download separately, gitignored)
+newdata/                <- downloaded datasets (MovieLens 20M + TMDB 930K, gitignored)
 data/processed/         <- generated artifacts: merged data, TF-IDF matrix, trained models (gitignored)
 src/ingestion/          <- loading, joining, text cleaning (Module 1)
 src/ir_engine/          <- TF-IDF + cosine similarity + Trie autocomplete (Module 2)
@@ -52,31 +50,38 @@ src/strategy_selector/  <- per-user strategy classifier (Module 3)
 src/ranking_engine/     <- multi-objective hybrid ranking (Module 4)
 src/evaluation/         <- metrics (search, recommendation, ML, system)
 tests/                  <- pytest unit tests, one file per module
-notebooks/               <- exploratory analysis
+notebooks/              <- exploratory analysis
+.gitignore              <- excludes datasets and processed artifacts
 CLAUDE.md               <- project context/conventions for Claude Code
+DATASET_MIGRATION.md    <- dataset rationale and migration notes
 eval_config.yaml        <- exact KPI names + tunable ranking objective weights
 requirements.txt
 ```
 
 ## Setup
 
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
+1. **Create virtual environment and install dependencies:**
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate   # Windows: .venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
 
-Place the downloaded datasets under `data/MovieLens/` and `data/tmdb/`, then run:
+2. **Download datasets** (MovieLens 20M and TMDB 2023 930K) and place them under `newdata/`:
+   - `newdata/movielens/` — `rating.csv`, `movie.csv`, `link.csv`, `tag.csv`
+   - `newdata/tmdb/` — `TMDB_movie_dataset_v11.csv`
 
-```bash
-python -m src.ingestion.build_dataset
-```
+3. **Run the ingestion pipeline** to merge, clean, and cache data:
+   ```bash
+   python -m src.ingestion.build_dataset
+   ```
+   This generates `data/processed/movies_merged.csv` and the TF-IDF matrix (cached).
 
 ## Status
 
 - [x] **Module 1 — Data Ingestion & Preprocessing**: loaders, join, NLTK cleaning
-  pipeline. 6/6 unit tests passing. 9,742 MovieLens movies → 3,537 successfully joined
-  to TMDB metadata; outputs cached to `data/processed/`.
+  pipeline. All unit tests passing. MovieLens 20M (~27K movies) → ~26.5K successfully joined
+  to TMDB metadata (98.04% join rate); outputs cached to `data/processed/`.
 - [ ] Module 2 — Classical IR Engine (TF-IDF + Trie)
 - [ ] Module 3 — Adaptive ML Strategy Selection Engine
 - [ ] Module 4 — Multi-Objective Hybrid Ranking Engine

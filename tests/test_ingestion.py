@@ -6,10 +6,10 @@ from src.ingestion.text_cleaner import clean_text
 
 
 def test_load_movielens(tmp_path):
-    (tmp_path / "ratings.csv").write_text("userId,movieId,rating,timestamp\n1,1,4.0,100\n")
-    (tmp_path / "movies.csv").write_text("movieId,title,genres\n1,Toy Story (1995),Animation\n")
-    (tmp_path / "links.csv").write_text("movieId,imdbId,tmdbId\n1,114709,862\n")
-    (tmp_path / "tags.csv").write_text("userId,movieId,tag,timestamp\n1,1,fun,100\n")
+    (tmp_path / "rating.csv").write_text("userId,movieId,rating,timestamp\n1,1,4.0,2005-04-02 23:53:47\n")
+    (tmp_path / "movie.csv").write_text("movieId,title,genres\n1,Toy Story (1995),Animation\n")
+    (tmp_path / "link.csv").write_text("movieId,imdbId,tmdbId\n1,114709,862\n")
+    (tmp_path / "tag.csv").write_text("userId,movieId,tag,timestamp\n1,1,fun,2005-04-02 23:53:47\n")
 
     ml = load_movielens(tmp_path)
 
@@ -19,17 +19,14 @@ def test_load_movielens(tmp_path):
 
 
 def test_load_tmdb(tmp_path):
-    (tmp_path / "tmdb_5000_movies.csv").write_text(
-        'id,title,overview,genres,keywords,vote_average,vote_count,popularity\n'
-        '862,Toy Story,"A cowboy doll","[{""name"": ""Animation""}]","[]",8.0,100,50.0\n'
-    )
-    (tmp_path / "tmdb_5000_credits.csv").write_text(
-        'movie_id,title,cast,crew\n862,Toy Story,"[]","[]"\n'
+    (tmp_path / "TMDB_movie_dataset_v11.csv").write_text(
+        "id,title,overview,genres,keywords,vote_average,vote_count,popularity\n"
+        '862,Toy Story,"A cowboy doll","Animation, Comedy","toys, jealousy",8.0,100,50.0\n'
     )
 
     tmdb = load_tmdb(tmp_path)
 
-    assert set(tmdb.keys()) == {"movies", "credits"}
+    assert set(tmdb.keys()) == {"movies"}
     assert tmdb["movies"].iloc[0]["title"] == "Toy Story"
 
 
@@ -45,18 +42,11 @@ def test_join_movielens_tmdb_builds_text_chunk():
             {
                 "id": [862],
                 "overview": ["A cowboy doll is jealous"],
-                "genres": ['[{"name": "Animation"}, {"name": "Comedy"}]'],
-                "keywords": ['[{"name": "toys"}]'],
+                "genres": ["Animation, Comedy"],
+                "keywords": ["toys, jealousy"],
                 "vote_average": [8.0],
                 "vote_count": [100],
                 "popularity": [50.0],
-            }
-        ),
-        "credits": pd.DataFrame(
-            {
-                "movie_id": [862],
-                "cast": ['[{"name": "Tom Hanks"}, {"name": "Tim Allen"}]'],
-                "crew": ['[{"name": "John Lasseter", "job": "Director"}]'],
             }
         ),
     }
@@ -66,10 +56,11 @@ def test_join_movielens_tmdb_builds_text_chunk():
     assert report["joined_rows"] == 1
     row = result.iloc[0]
     assert row["genre_names"] == ["Animation", "Comedy"]
-    assert row["cast_names"] == ["Tom Hanks", "Tim Allen"]
-    assert row["crew_names"] == ["John Lasseter"]
+    assert row["keyword_names"] == ["toys", "jealousy"]
+    assert "cast_names" not in result.columns
+    assert "crew_names" not in result.columns
     assert "cowboy" in row["text_chunk"]
-    assert "Tom Hanks" in row["text_chunk"]
+    assert "Tom Hanks" not in row["text_chunk"]
 
 
 def test_join_drops_unmatched_movies():
@@ -82,14 +73,13 @@ def test_join_drops_unmatched_movies():
             {
                 "id": [1],
                 "overview": ["irrelevant"],
-                "genres": ["[]"],
-                "keywords": ["[]"],
+                "genres": [""],
+                "keywords": [""],
                 "vote_average": [1.0],
                 "vote_count": [1],
                 "popularity": [1.0],
             }
         ),
-        "credits": pd.DataFrame({"movie_id": [1], "cast": ["[]"], "crew": ["[]"]}),
     }
 
     result, report = join_movielens_tmdb(ml, tmdb)

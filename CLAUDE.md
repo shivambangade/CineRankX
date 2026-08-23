@@ -6,7 +6,8 @@ CineRankX, with three engines built in this order:
 
 1. **Classical IR engine** — TF-IDF vector space model + a Trie for prefix/autocomplete
    search over movie titles.
-   - Per-movie text chunk = overview + genres + keywords + cast + crew merged together.
+   - Per-movie text chunk = overview + genres + keywords merged together. No cast/crew —
+     the TMDB dataset in use has no cast/crew data (see Datasets below).
    - Cleaned with NLTK: lowercasing, stop-word removal, stemming.
    - Vectorized with TF-IDF; similarity between movies = cosine similarity of their vectors.
 2. **Adaptive ML Strategy Selection Engine** — a classifier that predicts, per user, which
@@ -20,13 +21,19 @@ Problem statement it's solving: existing systems fix one strategy and rank by a 
 similarity score, ignoring diversity and per-user variation. CineRankX predicts the best
 strategy per user and ranks on six objectives instead of one.
 
-## Datasets (already downloaded into data/raw/)
-- **Primary — MovieLens ml-latest-small**: ~100K ratings, ~9,000 movies.
-  Files: `ratings.csv`, `movies.csv`, `links.csv`, `tags.csv`.
-- **Secondary — TMDB 5000**: `tmdb_5000_movies.csv` (overview, keywords, genres),
-  `tmdb_5000_credits.csv` (cast, crew).
-- **Join key**: `links.csv` maps MovieLens `movieId` -> `tmdbId`, which joins to TMDB's
-  `id` column. This combines real rating history with rich searchable text metadata.
+## Datasets (already downloaded into newdata/)
+- **Primary — MovieLens 20M** (`newdata/movielens/`): ~20M ratings, ~27,000 movies.
+  Files: `rating.csv`, `movie.csv`, `link.csv`, `tag.csv` (note: singular filenames,
+  unlike ml-latest-small's `ratings.csv` etc.). `rating.csv`/`tag.csv` timestamps are
+  datetime strings, not epoch ints. Also ships `genome_scores.csv`/`genome_tags.csv`
+  (per-movie tag-relevance vectors) — not loaded by this pipeline, left unused.
+- **Secondary — TMDB Movies Dataset 2023** (`newdata/tmdb/`): single file
+  `TMDB_movie_dataset_v11.csv`, ~1.48M movies (overview, genres, keywords as plain
+  comma-separated strings, not JSON). No cast/crew data or credits file at all —
+  a deliberate scope decision, not a placeholder (see DATASET_MIGRATION.md).
+- **Join key**: `link.csv` maps MovieLens `movieId` -> `tmdbId`, which joins to TMDB's
+  `id` column. Join rate ~98% (vs. ~36% with the original ml-latest-small + TMDB 5000
+  pairing) since this TMDB dataset is near-full TMDB coverage rather than a fixed slice.
 - Save the cleaned/merged dataframe to `data/processed/` — don't recompute the join or
   the TF-IDF matrix on every run.
 
@@ -37,7 +44,7 @@ embedding models unless explicitly asked — this stays explainable and rule-bas
 
 ## Project structure
 ```
-data/raw/            <- downloaded datasets (MovieLens + TMDB), do not modify
+newdata/              <- downloaded datasets (MovieLens 20M + TMDB 930K), do not modify
 data/processed/       <- cleaned/merged/cached artifacts (TF-IDF matrix, merged df, etc.)
 src/ingestion/        <- loading + joining MovieLens/TMDB
 src/ir_engine/         <- TF-IDF pipeline, cosine similarity, Trie autocomplete

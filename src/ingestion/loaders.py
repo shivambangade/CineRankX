@@ -1,30 +1,30 @@
-"""Loaders for the raw MovieLens (ml-latest-small) and TMDB 5000 CSVs.
+"""Loaders for the raw MovieLens 20M and TMDB 930K CSVs.
 
-Per the build plan's Decision #0, these read directly from data/MovieLens/
-and data/tmdb/ (the actual on-disk folder names), not data/raw/.
+Reads from newdata/movielens/ and newdata/tmdb/ (the actual on-disk folder
+names for this dataset pair). MovieLens 20M's genome_scores.csv and
+genome_tags.csv are intentionally not loaded here — unused by this pipeline.
 """
 
 from pathlib import Path
 
 import pandas as pd
 
-DEFAULT_MOVIELENS_DIR = Path("data/MovieLens")
-DEFAULT_TMDB_DIR = Path("data/tmdb")
+DEFAULT_MOVIELENS_DIR = Path("newdata/movielens")
+DEFAULT_TMDB_DIR = Path("newdata/tmdb")
 
 
 def load_movielens(base_dir: Path = DEFAULT_MOVIELENS_DIR) -> dict[str, pd.DataFrame]:
     base_dir = Path(base_dir)
     return {
-        "ratings": pd.read_csv(base_dir / "ratings.csv"),
-        "movies": pd.read_csv(base_dir / "movies.csv"),
-        "links": pd.read_csv(base_dir / "links.csv"),
-        "tags": pd.read_csv(base_dir / "tags.csv"),
+        "ratings": pd.read_csv(base_dir / "rating.csv"),
+        "movies": pd.read_csv(base_dir / "movie.csv"),
+        "links": pd.read_csv(base_dir / "link.csv"),
+        "tags": pd.read_csv(base_dir / "tag.csv"),
     }
 
 
 def load_tmdb(base_dir: Path = DEFAULT_TMDB_DIR) -> dict[str, pd.DataFrame]:
     base_dir = Path(base_dir)
     return {
-        "movies": pd.read_csv(base_dir / "tmdb_5000_movies.csv"),
-        "credits": pd.read_csv(base_dir / "tmdb_5000_credits.csv"),
+        "movies": pd.read_csv(base_dir / "TMDB_movie_dataset_v11.csv"),
     }

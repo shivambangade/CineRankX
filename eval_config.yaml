@@ -1,0 +1,51 @@
+# CineRankX evaluation config
+# Exact metric names from the approved KPI table — use these names verbatim
+# in src/evaluation/ so report/slide numbers match the code that produced them.
+
+search:
+  metrics:
+    - "Precision@10"
+    - "Recall@10"
+    - "MRR"
+    - "NDCG"
+    - "Search Latency"
+
+recommendation:
+  k_values: [5, 10, 20]     # tune as needed; used for Precision@K / Recall@K
+  metrics:
+    - "Precision@K"
+    - "Recall@K"
+    - "F1"
+    - "MAP"
+    - "Coverage"
+    - "Diversity"
+    - "Novelty"
+    - "Cold-Start Accuracy"
+
+machine_learning:
+  # Applies to the Adaptive ML Strategy Selection Engine's classifier
+  metrics:
+    - "Accuracy"
+    - "Precision"
+    - "Recall"
+    - "F1"
+    - "ROC-AUC"
+    - "Confusion Matrix"
+
+system:
+  metrics:
+    - "Response Time"
+    - "Memory Usage"
+    - "CPU Usage"
+    - "Throughput"
+
+ranking_objectives:
+  # The Multi-Objective Hybrid Ranking Engine's six weighted objectives.
+  # Keep these as tunable config, never hardcoded in the ranking logic.
+  weights:
+    relevance: 0.30
+    diversity: 0.15
+    novelty: 0.15
+    coverage: 0.10
+    popularity_quality: 0.15
+    predicted_rating: 0.15

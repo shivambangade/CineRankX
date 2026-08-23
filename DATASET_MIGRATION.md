@@ -60,3 +60,86 @@ fixed 5,000-movie TMDB slice with a near-full TMDB export.
     (e.g. "hank", "allen", "lasseter") leak into the cleaned chunk.
   - Re-ran Module 1 tests: 6/6 passing, fixtures updated to the new schema (singular
     filenames, comma-separated genres/keywords, no credits/cast/crew fixtures).
+
+## Known limitations — Module 3 (Adaptive ML Strategy Selection Engine)
+
+Two limitations in the strategy selector are documented here rather than fixed. Both
+are consequences of label prevalence and data scale, not defects in the classifier,
+the profile features, or the backtest. Measurements below are from a 5,000-user sample
+(750,512 ratings), `n_splits=5`, 1,000-user held-out test set.
+
+### 1. `content_based` is hard to predict (F1 ≈ 0.12, low recall)
+
+`content_based` wins the backtest for only **347 of 5,000 users (6.9%)**. At that
+prevalence the classifier recovers very few of them:
+
+```
+content_based    Precision 0.2069   Recall 0.0857   F1 0.1212   support 70
+```
+
+Three remedies were tried and none moved F1 materially:
+
+| Remedy | Result |
+|---|---|
+| `class_weight='balanced'` on the RandomForest | No improvement |
+| Genre-identity features (`top_genre_share`, `genre_entropy`) | No improvement |
+| Multi-split label averaging (`n_splits` 1 → 5) | F1 0.1221 → 0.1212 (flat) |
+
+Multi-split averaging was added to test the hypothesis that borderline users' labels
+were flipping between `collaborative` and `content_based` by chance on a single
+random split. It did **not** improve `content_based`: precision rose (0.148 → 0.207)
+while recall fell (0.104 → 0.086), netting out to no change.
+
+Averaging was kept anyway, because it fixed a different and real problem: label
+stability. Under a single split, `popularity` won for 1,883 users (37.7%); averaged
+over five splits it wins for only 446 (8.9%). Those ~1,400 users were one-shot wins
+that disappear once each user's hit-rate is averaged — genuine noise in the ground
+truth, now removed.
+
+**Interpretation**: at this scale the limit is the number of `content_based` examples
+available to learn from, not the model's capacity to learn them. Note that
+`content_based`, despite the worst F1 of the three classes, shows the *strongest*
+per-class discrimination relative to its own base rate (see below) — the classifier
+is identifying a real minority signal, it is simply being conservative about it.
+
+### 2. Overall accuracy is below the majority-class baseline
+
+```
+Accuracy                 0.7960
+Majority-class baseline  0.8410     (always predict `collaborative`)
+Lift                    -0.0450
+ROC-AUC                  0.6421
+```
+
+This deficit is partly by design: `class_weight='balanced'` deliberately trades
+majority-class accuracy for minority-class recall, so an accuracy figure below the
+"always guess the majority" baseline is expected. It is not evidence that the model
+has learned nothing — accuracy alone cannot distinguish those two cases on an 84%
+-imbalanced problem, which is why the metric is reported alongside ROC-AUC and
+per-class figures rather than on its own.
+
+Evidence the model is learning real signal beyond guessing the majority class:
+
+- **ROC-AUC 0.6421**, meaningfully above the 0.50 chance level.
+- **Per-class precision vs. that class's own base rate** in the test set:
+
+  | Strategy | Support | Base rate | Precision | Ratio |
+  |---|---|---|---|---|
+  | `collaborative` | 841 | 84.1% | 0.8540 | 1.02× |
+  | `content_based` | 70 | 7.0% | 0.2069 | **2.96×** |
+  | `popularity` | 89 | 8.9% | 0.1132 | 1.27× |
+
+  `content_based` predictions are right about three times as often as blind guessing
+  at its base rate would be. `popularity` is weakly above chance. `collaborative`'s
+  high raw F1 (0.891) is mostly majority-class mass, not discrimination — its 1.02×
+  ratio is the honest read of it.
+
+**Framing**: Module 3 delivers **partially effective personalization**, not a solved
+classification problem. It reliably identifies the large `collaborative` majority and
+extracts a real if low-recall `content_based` signal, while `popularity` sits close to
+chance. Downstream (Module 4) should treat the predicted strategy as a weighted prior
+rather than a hard routing decision, and should degrade gracefully to `collaborative`
+when classifier confidence is low.
+
+Both limitations are accepted as scoped; no further investigation is planned at this
+data scale.

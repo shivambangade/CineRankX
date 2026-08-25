@@ -19,10 +19,17 @@ from sklearn.metrics import (
     precision_recall_fscore_support,
 )
 
+try:
+    from imblearn.over_sampling import SMOTE
+except ImportError:  # pragma: no cover - optional dependency
+    SMOTE = None
+
 _MODEL_PATH = Path("data/processed/strategy_classifier.pkl")
 _LE_PATH = Path("data/processed/strategy_label_encoder.pkl")
 
 STRATEGY_CLASSES = ["collaborative", "content_based", "popularity"]
+
+_SMOTE_K_NEIGHBORS = 5  # SMOTE's default; lowered automatically for tiny minority classes
 
 
 class StrategyClassifier:
@@ -37,12 +44,21 @@ class StrategyClassifier:
         # population the confusion matrix was computed on, never train-set rows.
         self.holdout_predictions = None
 
-    def fit(self, features_df: pd.DataFrame, labels_df: pd.DataFrame) -> dict:
+    def fit(
+        self,
+        features_df: pd.DataFrame,
+        labels_df: pd.DataFrame,
+        use_smote: bool = False,
+    ) -> dict:
         """Train classifier on features and strategy labels.
 
         Args:
             features_df: DataFrame with [userId, num_ratings, avg_rating, ...]
             labels_df: DataFrame with [userId, best_strategy, ...]
+            use_smote: oversample minority classes with SMOTE. Applied ONLY to
+                the training fold, strictly after the train/test split, so no
+                synthetic point is ever derived from a held-out user. See the
+                marked block below.
 
         Returns:
             Dictionary with evaluation metrics: accuracy, majority_baseline_accuracy,
@@ -65,9 +81,32 @@ class StrategyClassifier:
         classes_missing = [c for c in STRATEGY_CLASSES if c not in classes_present]
 
         stratify = y_encoded if len(y_encoded) > len(classes_present) * 2 else None
+
+        # ---------------------------------------------------------------
+        # SPLIT FIRST. Everything below this line touches X_train/y_train
+        # only; X_test/y_test are frozen here and never resampled, rescaled
+        # or otherwise seen by the oversampler.
+        # ---------------------------------------------------------------
         X_train, X_test, y_train, y_test = train_test_split(
             X, y_encoded, test_size=0.2, random_state=42, stratify=stratify
         )
+
+        # Keep the ORIGINAL training labels: the majority-class baseline further
+        # down must describe the real class distribution. Reading it off a
+        # SMOTE-balanced y_train would make "the most common label" an arbitrary
+        # tie-break between equal-sized classes and the baseline meaningless.
+        y_train_original = y_train
+
+        # ---------------------------------------------------------------
+        # SMOTE SECOND — train fold only, after the split above.
+        # Synthetic minority points are interpolated between real TRAINING
+        # neighbours. No test-set row is an input, so nothing leaks.
+        # ---------------------------------------------------------------
+        smote_info = {"applied": False}
+        if use_smote:
+            X_train, y_train, smote_info = self._resample_training_fold(
+                X_train, y_train, classes_present
+            )
 
         self.model = RandomForestClassifier(
             n_estimators=100, random_state=42, n_jobs=-1, class_weight="balanced"
@@ -93,7 +132,7 @@ class StrategyClassifier:
 
         # Majority-class baseline: always predict the most common training label.
         # Accuracy above this is the actual signal from features, not class imbalance.
-        majority_class = Counter(y_train).most_common(1)[0][0]
+        majority_class = Counter(y_train_original).most_common(1)[0][0]
         majority_baseline_accuracy = float(np.mean(y_test == majority_class))
 
         class_labels = list(range(len(classes_present)))
@@ -121,6 +160,7 @@ class StrategyClassifier:
             "confusion_matrix_labels": classes_present,
             "classes_present": classes_present,
             "classes_missing": classes_missing,
+            "smote": smote_info,
         }
 
         if len(classes_present) == 2:
@@ -132,6 +172,50 @@ class StrategyClassifier:
                 metrics["roc_auc"] = 0.0
 
         return metrics
+
+    @staticmethod
+    def _resample_training_fold(X_train, y_train, classes_present: list) -> tuple:
+        """SMOTE-oversample the training fold. Never called before the split.
+
+        SMOTE builds each synthetic minority point by interpolating between a
+        real minority sample and one of its k nearest minority neighbours, so
+        it needs at least k+1 examples of the smallest class. k is lowered to
+        fit when the minority class is small, and resampling is skipped
+        entirely when even k=1 is impossible — silently training on
+        un-resampled data would otherwise be reported as a SMOTE run.
+
+        Returns:
+            (X_resampled, y_resampled, info) where info records what actually
+            happened, so the caller can never mistake a skip for a success.
+        """
+        counts = Counter(y_train)
+        before = {classes_present[label]: int(n) for label, n in counts.items()}
+        info = {"applied": False, "before": before, "after": before, "k_neighbors": None}
+
+        if SMOTE is None:
+            info["skipped_reason"] = "imbalanced-learn is not installed"
+            return X_train, y_train, info
+
+        minority_count = min(counts.values())
+        if len(counts) < 2 or minority_count < 2:
+            info["skipped_reason"] = f"smallest class has {minority_count} sample(s); SMOTE needs >= 2"
+            return X_train, y_train, info
+
+        k_neighbors = min(_SMOTE_K_NEIGHBORS, minority_count - 1)
+        X_resampled, y_resampled = SMOTE(
+            random_state=42, k_neighbors=k_neighbors
+        ).fit_resample(X_train, y_train)
+
+        after = Counter(y_resampled)
+        info = {
+            "applied": True,
+            "before": before,
+            "after": {classes_present[label]: int(n) for label, n in after.items()},
+            "k_neighbors": k_neighbors,
+            "rows_before": int(len(y_train)),
+            "rows_after": int(len(y_resampled)),
+        }
+        return X_resampled, y_resampled, info
 
     def predict(self, features_df: pd.DataFrame) -> pd.DataFrame:
         """Predict strategy for users given their profile features.

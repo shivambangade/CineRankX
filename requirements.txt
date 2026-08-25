@@ -7,3 +7,4 @@ scipy
 joblib
 pytest
 pyyaml
+imbalanced-learn

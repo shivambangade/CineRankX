@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.strategy_selector.classifier import STRATEGY_CLASSES
 from src.strategy_selector import (
     StrategyClassifier,
     extract_profile_features,
@@ -576,3 +577,145 @@ class TestStrategyClassifier:
         pred1 = classifier.predict(features_df)
         pred2 = classifier2.predict(features_df)
         assert (pred1["predicted_strategy"].values == pred2["predicted_strategy"].values).all()
+
+
+class TestSMOTEOversampling:
+    """SMOTE must only ever touch the training fold, after the split."""
+
+    @pytest.fixture
+    def imbalanced_features_and_labels(self):
+        """40 users, deliberately imbalanced: 30 collaborative / 8 popularity / 2 content_based."""
+        rng = np.random.default_rng(0)
+        n = 40
+        features_df = pd.DataFrame(
+            {
+                "userId": range(1, n + 1),
+                "num_ratings": rng.integers(5, 300, n),
+                "avg_rating": rng.uniform(2.0, 5.0, n),
+                "rating_std": rng.uniform(0.3, 1.5, n),
+                "num_genres": rng.integers(2, 18, n),
+                "genre_diversity": rng.uniform(0.1, 0.9, n),
+                "top_genre_share": rng.uniform(0.1, 0.9, n),
+                "genre_entropy": rng.uniform(0.1, 1.0, n),
+            }
+        )
+        labels_df = pd.DataFrame(
+            {
+                "userId": range(1, n + 1),
+                "best_strategy": ["collaborative"] * 30 + ["popularity"] * 8 + ["content_based"] * 2,
+            }
+        )
+        return features_df, labels_df
+
+    def test_smote_balances_the_training_fold(self, imbalanced_features_and_labels):
+        features_df, labels_df = imbalanced_features_and_labels
+        metrics = StrategyClassifier().fit(features_df, labels_df, use_smote=True)
+
+        smote = metrics["smote"]
+        assert smote["applied"] is True
+        assert len(set(smote["after"].values())) == 1, "training fold not balanced after SMOTE"
+        assert smote["rows_after"] > smote["rows_before"]
+
+    def test_smote_does_not_change_the_test_set(self, imbalanced_features_and_labels):
+        """The strongest no-leak signal: identical holdout users either way.
+
+        If SMOTE ran before the split, synthetic rows would land in the test
+        fold and the held-out user set would differ between the two runs.
+        """
+        features_df, labels_df = imbalanced_features_and_labels
+
+        baseline = StrategyClassifier()
+        baseline.fit(features_df, labels_df, use_smote=False)
+        smoted = StrategyClassifier()
+        smoted.fit(features_df, labels_df, use_smote=True)
+
+        assert list(baseline.holdout_predictions["userId"]) == list(smoted.holdout_predictions["userId"])
+        assert list(baseline.holdout_predictions["true_strategy"]) == list(
+            smoted.holdout_predictions["true_strategy"]
+        )
+
+    def test_holdout_users_are_all_real_and_never_synthetic(self, imbalanced_features_and_labels):
+        """Every evaluated user must be a genuine row from the input frame."""
+        features_df, labels_df = imbalanced_features_and_labels
+        classifier = StrategyClassifier()
+        classifier.fit(features_df, labels_df, use_smote=True)
+
+        real_user_ids = set(features_df["userId"])
+        assert set(classifier.holdout_predictions["userId"]) <= real_user_ids
+
+    def test_smote_row_count_matches_train_fold_not_full_dataset(self, imbalanced_features_and_labels):
+        """rows_before must equal the TRAIN fold size, not the whole dataset.
+
+        Catches the leak directly: if SMOTE were fed the full frame before the
+        split, rows_before would be 40 rather than the 32-row training fold.
+        """
+        features_df, labels_df = imbalanced_features_and_labels
+        metrics = StrategyClassifier().fit(features_df, labels_df, use_smote=True)
+
+        n_total = len(features_df)
+        expected_train_rows = n_total - int(round(n_total * 0.2))
+        assert metrics["smote"]["rows_before"] == expected_train_rows
+        assert metrics["smote"]["rows_before"] < n_total
+
+    def test_majority_baseline_uses_real_distribution_not_resampled(self, imbalanced_features_and_labels):
+        """The baseline must describe the real class mix, not the balanced one.
+
+        Reading the majority class off a SMOTE-balanced y_train would make it an
+        arbitrary tie-break between equal classes; the baseline would then be
+        wrong and the reported lift meaningless.
+        """
+        features_df, labels_df = imbalanced_features_and_labels
+
+        baseline = StrategyClassifier().fit(features_df, labels_df, use_smote=False)
+        smoted = StrategyClassifier().fit(features_df, labels_df, use_smote=True)
+
+        assert smoted["majority_baseline_accuracy"] == pytest.approx(
+            baseline["majority_baseline_accuracy"]
+        )
+
+    def test_smote_off_by_default(self, imbalanced_features_and_labels):
+        features_df, labels_df = imbalanced_features_and_labels
+        metrics = StrategyClassifier().fit(features_df, labels_df)
+        assert metrics["smote"]["applied"] is False
+
+    def test_smote_skipped_when_minority_too_small_to_interpolate(self):
+        """A skip must be reported as a skip, never silently pass as a SMOTE run.
+
+        Exercises the guard directly rather than through fit(): building a frame
+        whose *training fold* lands on a single minority row depends on
+        stratified-split arithmetic, which is not what this test is about.
+        """
+        X_train = pd.DataFrame({"num_ratings": [10, 20, 30, 40], "avg_rating": [3.0, 3.5, 4.0, 4.5]})
+        y_train = np.array([0, 0, 0, 1])  # one lone minority sample
+
+        _, _, info = StrategyClassifier._resample_training_fold(
+            X_train, y_train, ["collaborative", "content_based"]
+        )
+
+        assert info["applied"] is False
+        assert "skipped_reason" in info
+
+    def test_smote_helper_leaves_data_untouched_when_skipped(self):
+        X_train = pd.DataFrame({"num_ratings": [10, 20, 30, 40], "avg_rating": [3.0, 3.5, 4.0, 4.5]})
+        y_train = np.array([0, 0, 0, 1])
+
+        X_out, y_out, _ = StrategyClassifier._resample_training_fold(
+            X_train, y_train, ["collaborative", "content_based"]
+        )
+
+        assert len(X_out) == len(X_train)
+        assert list(y_out) == list(y_train)
+
+    def test_k_neighbors_lowered_for_small_minority(self, imbalanced_features_and_labels):
+        features_df, labels_df = imbalanced_features_and_labels
+        metrics = StrategyClassifier().fit(features_df, labels_df, use_smote=True)
+        # content_based has ~2 users total, so k must drop below the default 5.
+        assert 1 <= metrics["smote"]["k_neighbors"] <= 5
+
+    def test_smote_model_still_predicts_real_class_names(self, imbalanced_features_and_labels):
+        features_df, labels_df = imbalanced_features_and_labels
+        classifier = StrategyClassifier()
+        classifier.fit(features_df, labels_df, use_smote=True)
+
+        predictions = classifier.predict(features_df)
+        assert set(predictions["predicted_strategy"]) <= set(STRATEGY_CLASSES)

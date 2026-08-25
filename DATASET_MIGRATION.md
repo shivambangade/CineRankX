@@ -77,13 +77,15 @@ prevalence the classifier recovers very few of them:
 content_based    Precision 0.2069   Recall 0.0857   F1 0.1212   support 70
 ```
 
-Three remedies were tried and none moved F1 materially:
+Four remedies were tried. Three moved F1 not at all; the fourth (SMOTE) moved it
+modestly but bought a decision-threshold shift rather than better discrimination:
 
 | Remedy | Result |
 |---|---|
 | `class_weight='balanced'` on the RandomForest | No improvement |
 | Genre-identity features (`top_genre_share`, `genre_entropy`) | No improvement |
 | Multi-split label averaging (`n_splits` 1 → 5) | F1 0.1221 → 0.1212 (flat) |
+| SMOTE oversampling of the training fold | F1 +0.038 (10-seed mean), but ROC-AUC flat — see section 3 |
 
 Multi-split averaging was added to test the hypothesis that borderline users' labels
 were flipping between `collaborative` and `content_based` by chance on a single
@@ -143,3 +145,106 @@ when classifier confidence is low.
 
 Both limitations are accepted as scoped; no further investigation is planned at this
 data scale.
+
+### 3. SMOTE oversampling — investigated, implemented, left disabled
+
+SMOTE (imbalanced-learn) was added as a fourth remedy for `content_based`'s low
+prevalence, on the hypothesis that synthetic minority examples would give the
+classifier a boundary to learn. It is implemented in `classifier.py` behind
+`fit(..., use_smote=False)` and **ships disabled**. The investigation is recorded here
+because its negative result is the strongest evidence yet for the diagnosis in
+section 1.
+
+#### Leakage control
+
+SMOTE is applied strictly **after** `train_test_split`, to the training fold only —
+oversampling before the split would interpolate synthetic points from held-out users
+and produce inflated, meaningless metrics. In `fit()` the ordering is marked with
+explicit comment banners: the split happens first, `X_test`/`y_test` are frozen there
+and are never passed to `_resample_training_fold()`. Verified three ways:
+
+- Both arms evaluate an **identical held-out set** (same user IDs, same true labels,
+  1,000 users) — a pre-split SMOTE would have put synthetic rows in the test fold and
+  changed it.
+- `rows_before` reported by the resampler is 4,000 (the train fold), not 5,000.
+- On a fixture with deliberately disjoint per-class feature ranges, **every** synthetic
+  point falls inside the convex hull of the *training* minority rows, and no synthetic
+  row duplicates a test row. SMOTE only interpolates, so a point outside that hull
+  would be proof of a leak.
+
+Regression tests covering all three checks live in `TestSMOTEOversampling`.
+
+One related bug was fixed while wiring this up: the majority-class baseline read its
+majority off `y_train`, which SMOTE balances. Post-SMOTE that makes "most common label"
+an arbitrary tie-break between equal-sized classes, silently corrupting the baseline
+and the reported lift. The baseline now reads from `y_train_original`, captured before
+resampling.
+
+#### Result: a single split is not enough to judge this
+
+On the documented `random_state=42` split, SMOTE looked like a clear win — `content_based`
+F1 0.109 → 0.220, with precision *and* recall both up and ROC-AUC +0.013. Repeating the
+identical two-arm comparison across **10 seeds** showed seed 42 was the most favourable
+of the ten draws, and that two of those three signals do not survive:
+
+| Metric | Baseline | SMOTE | Δ | SMOTE wins |
+|---|---|---|---|---|
+| `content_based` F1 | 0.1019 ± 0.0188 | 0.1402 ± 0.0455 | **+0.0383** | 9/10 |
+| `content_based` recall | 0.0771 ± 0.0181 | 0.1243 ± 0.0442 | **+0.0471** | 9/10 |
+| `content_based` precision | 0.1552 ± 0.0329 | 0.1628 ± 0.0500 | +0.0075 | 4/10 |
+| `popularity` F1 | 0.1514 ± 0.0266 | 0.1403 ± 0.0294 | −0.0112 | 3/10 |
+| `collaborative` F1 | 0.8879 ± 0.0044 | 0.8778 ± 0.0080 | −0.0100 | 0/10 |
+| Accuracy | 0.7920 ± 0.0061 | 0.7743 ± 0.0122 | −0.0177 | 0/10 |
+| ROC-AUC | 0.6273 ± 0.0209 | 0.6223 ± 0.0221 | −0.0049 | 4/10 |
+
+Per-seed `content_based` F1 delta ranged from −0.0110 to +0.1116, mean +0.0383 — seed 42's
++0.1116 was roughly three times the typical effect. The precision gain and the ROC-AUC
+gain were both seed-42 artifacts; across seeds each is a coin flip.
+
+#### Conclusion: rebalancing moves the threshold, not the probabilities
+
+Higher recall, flat precision and **flat ROC-AUC** together mean the classifier is not
+discriminating better — it is pushing the decision boundary toward the minority class.
+Confirmed by comparing SMOTE against simply scaling up `class_weight` (10 seeds each):
+
+| Arm | `content_based` F1 | recall | precision | Accuracy | ROC-AUC |
+|---|---|---|---|---|---|
+| A `class_weight='balanced'` (current) | 0.1019 | 0.0771 | 0.1552 | 0.7920 | 0.6273 |
+| B SMOTE | 0.1402 | 0.1243 | 0.1628 | 0.7743 | 0.6223 |
+| C `balanced` × 2 on minorities | 0.1469 | 0.1543 | 0.1422 | 0.7234 | 0.6258 |
+| D `balanced` × 4 on minorities | 0.1756 | 0.2943 | 0.1253 | 0.5701 | 0.6188 |
+| E `balanced` × 8 on minorities | 0.1477 | 0.3800 | 0.0917 | 0.3256 | 0.6046 |
+
+**ROC-AUC is flat (0.605–0.627) across every arm.** No rebalancing method — synthetic
+oversampling or class weighting — improves the model's ability to rank users by
+probability. They only trade accuracy for minority recall, at different exchange rates:
+
+| Arm | Accuracy lost per point of `content_based` recall gained |
+|---|---|
+| B SMOTE | −0.375 |
+| C `balanced` × 2 | −0.889 |
+| D `balanced` × 4 | −1.022 |
+| E `balanced` × 8 | −1.540 |
+
+SMOTE is the best-priced of the four (~2.4× more efficient than the cheapest
+`class_weight` alternative, and the only one that does not degrade `content_based`
+precision) — but it is buying a threshold shift, not new information. This is exactly
+what section 1 predicted: SMOTE interpolates *within* the 278 real `content_based`
+training points, so it cannot manufacture signal that is not already there.
+
+#### Why it ships disabled
+
+Module 4 consumes the classifier's **`confidence`**, not its hard label —
+`strategy_source_weights(strategy, confidence)` blends the three candidate sources in
+proportion to predicted probability, treating the prediction as a weighted prior. What
+matters to that consumer is probability quality, which is precisely what ROC-AUC measures
+and precisely what no rebalancing arm improved. A decision-threshold shift is worth
+nothing to a downstream stage that never applies a threshold, while costing accuracy in
+10/10 seeds.
+
+The code is kept (tested, documented, `use_smote=False`) so the option remains available
+if a future consumer needs hard labels rather than probabilities.
+
+Reproduce with `scripts/compare_smote.py` (single-split before/after),
+`scripts/smote_seed_robustness.py` (10-seed cross-validation) and
+`scripts/smote_vs_class_weight.py` (rebalancing-method comparison).

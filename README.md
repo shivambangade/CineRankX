@@ -30,8 +30,12 @@ every KPI in `eval_config.yaml` and rendering them as one results table.
 
 ## Datasets
 
-- **Primary — [MovieLens 20M](https://grouplens.org/datasets/movielens/)**:
+- **Primary — [MovieLens 20M](https://www.kaggle.com/datasets/grouplens/movielens-20m-dataset)**:
   ~20M ratings, ~27,000 movies (`rating.csv`, `movie.csv`, `link.csv`, `tag.csv`).
+  Note the singular filenames — this Kaggle release differs from `ml-latest-small`'s
+  plural `ratings.csv`/`links.csv`, and its timestamps are datetime strings, not epoch
+  integers. Also ships `genome_scores.csv`/`genome_tags.csv`, which this pipeline
+  does not use.
 - **Secondary — [TMDB Movies Dataset 2023](https://www.kaggle.com/datasets/asaniczka/tmdb-movies-dataset-2023-930k-movies)**:
   ~930K movies with overview, keywords, genres (no cast/crew metadata).
 - Joined via `link.csv` (`movieId → tmdbId`), with ~98% join rate between MovieLens and TMDB.

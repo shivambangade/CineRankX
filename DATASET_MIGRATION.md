@@ -248,3 +248,69 @@ if a future consumer needs hard labels rather than probabilities.
 Reproduce with `scripts/compare_smote.py` (single-split before/after),
 `scripts/smote_seed_robustness.py` (10-seed cross-validation) and
 `scripts/smote_vs_class_weight.py` (rebalancing-method comparison).
+
+## Known limitations — evaluation suite (src/evaluation/)
+
+Measurements below are from `scripts/generate_kpi_report.py` on a 900,000-rating sample
+(6,034 users), 1,500 users evaluated, K = [5, 10, 20].
+
+### 1. Cold-Start Accuracy: the popularity baseline beats CineRankX
+
+```
+Cold-Start Accuracy (CineRankX)   0.5556
+Popularity baseline               0.5859
+Lift over baseline               -0.0303
+```
+
+**On cold-start users, a plain most-popular list outperforms the full pipeline.** This is
+a real, reproducible result and is recorded as such rather than omitted or softened.
+
+Interpretation: a user with five ratings gives the content and collaborative sources
+almost nothing to work with. Five TF-IDF seeds are a thin profile, and a five-item rating
+vector locates a poor collaborative neighbourhood. The blended candidate pool is
+therefore mostly noise around a popularity core, and the six-objective ranker then
+actively spends relevance on diversity, novelty and coverage — objectives that pull
+*away* from the safe popular picks that happen to be the right answer for a user we know
+nothing about. The system is paying for personalization it does not yet have the evidence
+to perform.
+
+This is consistent with, not contradictory to, Module 3's design: `popularity` exists as a
+strategy precisely because it is the right choice for some users. The finding is that the
+pipeline does not yet fall back to it hard enough when a profile is this thin.
+
+### 2. Cold-Start Accuracy is measured on a SIMULATED cohort
+
+MovieLens 20M only admits users who rated at least 20 movies. The minimum profile size in
+any sample is exactly 20, so the dataset contains **no natural cold-start users at all** and
+the KPI as literally defined ("users with <= 5 ratings") can never produce a number on it.
+
+The cohort is therefore simulated: real users have their training profile truncated to 5
+ratings and are scored on their untouched held-out items. Every *other* user keeps a full
+history, so the collaborative neighbourhood the cold user is matched against stays
+realistic — truncating everybody would measure a cold *system*, not a cold *user*.
+`evaluate_cold_start()` returns `mode` (`"natural"` / `"simulated"`) and the report prints
+an explicit note, so a simulated figure can never be mistaken for a natural one.
+
+### 3. Search relevance is a proxy, and Recall@10 is structurally near zero
+
+There is no hand-labeled relevance set. A result counts as relevant if it shares at least
+one genre or keyword with the query. That proxy marks on average **1,812 of the 26,743
+catalog movies relevant per query**, so `Recall@10` is bounded above by 10/1,812 and lands
+at 0.0101. It measures catalog breadth, not retrieval quality. `Precision@10` (0.4100) is
+correspondingly generous — sharing one genre is a low bar for "relevant". Both figures are
+reported with this caveat printed directly above them in the KPI report.
+
+### 4. A straw-man baseline initially inverted the cold-start conclusion
+
+Worth recording because the bug was self-flattering and the corrected result is worse.
+
+`popularity_baseline_top_k()` originally ranked by TMDB's `popularity` column. TMDB
+popularity is a live, recency-weighted metric; MovieLens 20M's ratings stop in 2015, so the
+two disagree almost completely. On the 900k sample the TMDB top-20 shared **1 title** with
+the 20 most-rated films and included movies rated by 0 and 5 users respectively, capturing
+9,426 ratings against the observed baseline's 46,864.
+
+Measured against that straw man, CineRankX appeared to beat the cold-start baseline by
+**+0.3535**. Against a baseline built from observed rating counts, the true figure is
+**-0.0303**. The baseline now uses observed counts and falls back to TMDB `popularity`
+only when no ratings are available.

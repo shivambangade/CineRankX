@@ -8,3 +8,4 @@ joblib
 pytest
 pyyaml
 imbalanced-learn
+psutil

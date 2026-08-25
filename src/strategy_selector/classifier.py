@@ -4,20 +4,12 @@ import pickle
 from collections import Counter
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.metrics import (
-    accuracy_score,
-    precision_score,
-    recall_score,
-    f1_score,
-    roc_auc_score,
-    confusion_matrix,
-    precision_recall_fscore_support,
-)
+
+from src.evaluation.ml_metrics import classification_metrics
 
 try:
     from imblearn.over_sampling import SMOTE
@@ -130,46 +122,17 @@ class StrategyClassifier:
             self.holdout_predictions["true_strategy"] == self.holdout_predictions["predicted_strategy"]
         )
 
-        # Majority-class baseline: always predict the most common training label.
-        # Accuracy above this is the actual signal from features, not class imbalance.
-        majority_class = Counter(y_train_original).most_common(1)[0][0]
-        majority_baseline_accuracy = float(np.mean(y_test == majority_class))
-
-        class_labels = list(range(len(classes_present)))
-        precisions, recalls, f1s, supports = precision_recall_fscore_support(
-            y_test, y_pred, labels=class_labels, zero_division=0
+        # The metric computation itself lives in src/evaluation/ml_metrics.py so
+        # the evaluation suite reports exactly what the classifier computed,
+        # rather than a second implementation that can drift from this one.
+        # y_train_original (not the possibly SMOTE-resampled y_train) is passed
+        # so the majority baseline describes the real class distribution.
+        metrics = classification_metrics(
+            y_test, y_pred, y_pred_proba, classes_present, y_train=y_train_original
         )
-        per_class = {
-            cls_name: {
-                "precision": float(p),
-                "recall": float(r),
-                "f1": float(f),
-                "support": int(s),
-            }
-            for cls_name, p, r, f, s in zip(classes_present, precisions, recalls, f1s, supports)
-        }
-
-        metrics = {
-            "accuracy": float(accuracy_score(y_test, y_pred)),
-            "majority_baseline_accuracy": majority_baseline_accuracy,
-            "precision": float(precision_score(y_test, y_pred, average="weighted", zero_division=0)),
-            "recall": float(recall_score(y_test, y_pred, average="weighted", zero_division=0)),
-            "f1": float(f1_score(y_test, y_pred, average="weighted", zero_division=0)),
-            "per_class": per_class,
-            "confusion_matrix": confusion_matrix(y_test, y_pred, labels=class_labels).tolist(),
-            "confusion_matrix_labels": classes_present,
-            "classes_present": classes_present,
-            "classes_missing": classes_missing,
-            "smote": smote_info,
-        }
-
-        if len(classes_present) == 2:
-            metrics["roc_auc"] = float(roc_auc_score(y_test, y_pred_proba[:, 1]))
-        elif len(classes_present) > 2:
-            try:
-                metrics["roc_auc"] = float(roc_auc_score(y_test, y_pred_proba, multi_class="ovr"))
-            except Exception:
-                metrics["roc_auc"] = 0.0
+        metrics["classes_present"] = classes_present
+        metrics["classes_missing"] = classes_missing
+        metrics["smote"] = smote_info
 
         return metrics
 

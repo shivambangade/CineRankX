@@ -173,14 +173,13 @@ class TestSelectBestStrategy:
 
 
 class TestPopularityWeighting:
-    def test_prefers_tmdb_popularity_column_when_available(self):
+    def test_prefers_observed_rating_counts_over_tmdb_popularity(self):
         from src.strategy_selector.strategy_labeler import _BacktestContext
 
-        # Movie 1 has a single 5.0 rating (would win a naive mean-rating top-10)
-        # but low TMDB popularity; movie 2 has broad support and high TMDB
-        # popularity. 10 decoy movies with mid-range popularity fill out the
-        # top-10 so the ranking is actually forced to choose. The TMDB column
-        # must be trusted over the noisy mean.
+        # Movies 3-12 carry HIGH TMDB popularity but nobody in this dataset
+        # rated them -- exactly the MovieLens/TMDB mismatch that made the old
+        # TMDB-first ordering surface films the user population never watches.
+        # Only movies people actually rated may be called popular here.
         decoy_ids = list(range(3, 13))
         ratings_df = pd.DataFrame(
             {
@@ -194,21 +193,41 @@ class TestPopularityWeighting:
             {
                 "movieId": [1, 2] + decoy_ids,
                 "title": ["Obscure", "Blockbuster"] + [f"Decoy{i}" for i in decoy_ids],
-                "popularity": [1.0, 500.0] + [50.0] * len(decoy_ids),
+                "popularity": [1.0, 500.0] + [400.0] * len(decoy_ids),
             }
         )
 
         ctx = _BacktestContext(ratings_df, movies_df)
 
+        assert 2 in ctx.top_popular_movies, "the most-rated movie must be popular"
+        assert not (set(decoy_ids) & ctx.top_popular_movies), (
+            "unrated movies must not enter on TMDB popularity alone"
+        )
+
+    def test_tmdb_popularity_used_only_when_no_ratings_exist(self):
+        from src.strategy_selector.strategy_labeler import _BacktestContext
+
+        empty_ratings = pd.DataFrame(columns=["userId", "movieId", "rating", "timestamp"])
+        movies_df = pd.DataFrame(
+            {"movieId": [1, 2], "title": ["A", "B"], "popularity": [1.0, 500.0]}
+        )
+        ctx = _BacktestContext(empty_ratings, movies_df)
         assert 2 in ctx.top_popular_movies
-        assert 1 not in ctx.top_popular_movies
+
+    def test_no_ratings_and_no_metadata_yields_nothing_popular(self):
+        from src.strategy_selector.strategy_labeler import _BacktestContext
+
+        empty_ratings = pd.DataFrame(columns=["userId", "movieId", "rating", "timestamp"])
+        movies_df = pd.DataFrame({"movieId": [1, 2], "title": ["A", "B"]})
+        ctx = _BacktestContext(empty_ratings, movies_df)
+        assert ctx.top_popular_movies == set()
 
     def test_fallback_ranks_broad_support_above_single_rating(self):
         from src.strategy_selector.strategy_labeler import _BacktestContext
 
-        # No "popularity" column -> falls back to ratings_df. Movie 1 has one
-        # perfect rating (naive mean = 5.0, would rank #1 under the old bug);
-        # movie 2 has broad strong support (naive mean = 4.2 from 20 raters).
+        # Ranking is by observed rating COUNT. Movie 1 has one perfect rating
+        # (naive mean = 5.0, which would rank it #1 under a mean-based ranking);
+        # movie 2 has broad strong support (4.2 from 20 raters).
         # 15 decoy movies at a realistic lower baseline (mean=3.0, count=10
         # each, matching typical vote counts) establish a population prior
         # that isn't itself distorted by movie 1's single extreme rating —

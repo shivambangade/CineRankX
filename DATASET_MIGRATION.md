@@ -262,8 +262,13 @@ Popularity baseline               0.5859
 Lift over baseline               -0.0303
 ```
 
-**On cold-start users, a plain most-popular list outperforms the full pipeline.** This is
+**On cold-start users, a plain most-popular list outperformed the full pipeline.** This is
 a real, reproducible result and is recorded as such rather than omitted or softened.
+
+**Superseded — see "Popularity source correction" below.** After both engines were changed
+to rank popularity by observed rating counts, this became `0.6061` vs `0.5859`, a lift of
+`+0.0202`. The figures above are the measurement taken *before* that fix and are kept as
+the record of what was found.
 
 Interpretation: a user with five ratings gives the content and collaborative sources
 almost nothing to work with. Five TF-IDF seeds are a thin profile, and a five-item rating
@@ -314,3 +319,92 @@ Measured against that straw man, CineRankX appeared to beat the cold-start basel
 **+0.3535**. Against a baseline built from observed rating counts, the true figure is
 **-0.0303**. The baseline now uses observed counts and falls back to TMDB `popularity`
 only when no ratings are available.
+
+
+## Popularity source correction — Modules 3 and 4
+
+Both engines ranked popularity by TMDB's `popularity` column. TMDB popularity is a live,
+recency-weighted metric; MovieLens 20M's ratings stop in 2015, so the two disagree almost
+completely. Both now rank by **observed rating counts**, falling back to TMDB `popularity`
+only when no ratings are available — the same ordering already used in
+`src/evaluation/recommendation_metrics.py`.
+
+Measured on a 900,000-rating sample:
+
+| | TMDB popularity | Observed counts | |
+|---|---|---|---|
+| Module 3 top-10 covers | 3,520 ratings (0.39%) | 25,819 (2.87%) | 7.3x |
+| Module 3 top-10 reaches | 2,361 / 6,034 users (39.1%) | 5,242 / 6,034 (86.9%) | 2.2x |
+| Module 4 top-200 covers | 84,755 (9.42%) | 254,031 (28.2%) | 3.0x |
+| Module 4 pool overlap | 37 of 200 items shared | | |
+
+### Effect on Module 3 (5,000-user backtest, same scale as section 1)
+
+| Metric | Before | After | |
+|---|---|---|---|
+| Accuracy | 0.7960 | 0.6600 | |
+| Majority-class baseline | 0.8410 | 0.5160 | |
+| **Lift over baseline** | **-0.0450** | **+0.1440** | now positive |
+| ROC-AUC | 0.6421 | 0.6841 | +0.042 |
+| `popularity` F1 | ~0.1103 | **0.6461** | 5.9x |
+| `collaborative` F1 | 0.8928 | 0.6951 | |
+| `content_based` F1 | 0.1212 | **0.0000** | collapsed |
+
+Label distribution: `collaborative` 84.1% -> 51.6%, `popularity` 8.9% -> **45.3%**,
+`content_based` 7.0% -> 3.1%.
+
+**This resolves limitation 2 above.** The classifier now beats the majority-class baseline
+by +0.144 — the first time in this project it has done so. Raw accuracy *fell* (0.796 ->
+0.660) but the old figure was mostly majority-class mass on an 84%-imbalanced problem; the
+class balance is now 52/45/3, so the baseline itself drops to 0.516. ROC-AUC confirms the
+improvement independently.
+
+**Why `popularity` improved so much**: the backtest previously scored that strategy against
+a top-10 only 39% of users had ever touched, so `pop_score` was 0.0 for the majority and
+the label was assigned largely by the all-zero tie-break in `select_best_strategy()` —
+noise rather than signal. Against a list 87% of users touch, `popularity` becomes a
+genuinely winnable and genuinely learnable class. The hypothesis recorded when this flaw
+was first flagged is confirmed.
+
+**Disclosed regression**: `content_based` fell to F1 0.0000 at 3.1% prevalence (156 of
+5,000 users) — the classifier now predicts it essentially never. Part of this is honest
+reallocation: users previously labeled `content_based` only because `pop_score` was
+artificially 0 now correctly resolve to `popularity`. But the class is now below the
+threshold of learnability at this data scale, worse than the F1 0.12 recorded in
+section 1. Net effect: two of three classes are genuinely predicted where one was before.
+Accepted as scoped; no further investigation planned.
+
+### Effect on the KPI report (1,500 users, 900k ratings)
+
+| Metric | Before | After | |
+|---|---|---|---|
+| Precision@5 | 0.1816 | 0.1944 | +0.013 |
+| Precision@10 | 0.1389 | 0.1529 | +0.014 |
+| Precision@20 | 0.1008 | 0.1104 | +0.010 |
+| Recall@10 | 0.1735 | 0.1732 | flat |
+| F1@10 | 0.1259 | 0.1308 | +0.005 |
+| MAP | 0.1124 | 0.1174 | +0.005 |
+| **Coverage** | 0.0964 | **0.0713** | **-0.025** |
+| Diversity | 0.8388 | 0.8322 | -0.007 |
+| **Novelty** | 0.2440 | **0.1715** | **-0.073** |
+| **Cold-Start Accuracy** | 0.5556 | **0.6061** | +0.051 |
+| Cold-start lift vs. baseline | -0.0303 | **+0.0202** | now positive |
+
+**The trade-off is real and expected**: accuracy metrics improved while Coverage and
+Novelty fell. The popularity source now proposes genuinely widely-rated films instead of
+obscure TMDB-popular ones — those are by definition less novel, and the same titles recur
+across users, which narrows catalog coverage. Better hit-rates, less discovery.
+
+### Caveat on the cold-start comparison after this change
+
+The evaluation's cold-start baseline (most-rated top-K) is now a **strict subset of Module
+4's own popularity candidate pool** — all 20 baseline items sit inside the ranker's 200-item
+pool. The comparison is therefore no longer "CineRankX vs. an independent baseline"; it is
+an **ablation**: given a candidate pool that already contains the baseline's exact answer,
+does the six-objective ranker order it better than plain popularity rank? The answer is
+yes, by +0.0202 — a modest but positive contribution from the ranking layer.
+
+This is a cleaner measurement than before (previously the two drew from disjoint universes,
+confounding "different candidate pool" with "different ranking method"), but it licenses a
+narrower claim. It is not evidence that the system beats popularity in general — only that
+its ranking improves on popularity ordering within a shared pool.

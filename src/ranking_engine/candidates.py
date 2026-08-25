@@ -116,14 +116,23 @@ class CandidateGenerator:
         self._build_collaborative()
 
     def _build_popularity(self) -> None:
+        # OBSERVED rating volume first, TMDB `popularity` only as a fallback.
+        # TMDB popularity is a live, recency-weighted metric while MovieLens
+        # 20M's ratings stop in 2015, so the two disagree almost completely:
+        # on a 900k-rating sample the two 200-item pools share just 37 entries,
+        # and the TMDB pool covers 9.4% of ratings against the observed pool's
+        # 28.2%. Ranking by it made this source propose films the user
+        # population barely watches, which is the opposite of a popularity
+        # signal. Rating counts are equally volume-aware and native to the data.
+        if self.ratings_df is not None and not self.ratings_df.empty:
+            counts = self.ratings_df["movieId"].value_counts().head(_POPULARITY_POOL)
+            self._popular = {int(k): float(v) for k, v in counts.items()}
+            return
         if "popularity" in self.movies_df.columns:
             top = self.movies_df.nlargest(_POPULARITY_POOL, "popularity")
             self._popular = dict(zip(top["movieId"].astype(int), top["popularity"].astype(float)))
             return
-        # Fallback for callers without TMDB metadata: rating volume, which is
-        # the same "how many people engaged with this" signal popularity encodes.
-        counts = self.ratings_df["movieId"].value_counts().head(_POPULARITY_POOL)
-        self._popular = {int(k): float(v) for k, v in counts.items()}
+        self._popular = {}
 
     def _build_collaborative(self) -> None:
         self._user_item = None

@@ -44,31 +44,32 @@ class _BacktestContext:
         self._build_collaborative(ratings_df)
 
     def _build_popularity(self, ratings_df: pd.DataFrame, movies_df: pd.DataFrame) -> None:
-        # Prefer TMDB's volume-aware `popularity` metric when available: a naive
-        # mean-rating top-10 lets a movie with one 5.0 rating outrank a movie
-        # rated 4.3 by 10,000 people, which is not a usable popularity baseline.
+        # OBSERVED rating counts first. The original code preferred TMDB's
+        # `popularity` column to avoid a naive mean-rating top-10 (where one
+        # 5.0 rating outranks a film rated 4.3 by 10,000 people) -- a real
+        # concern, but rating COUNTS solve it just as well while staying native
+        # to the dataset. TMDB popularity is live and recency-weighted whereas
+        # MovieLens 20M stops in 2015: its top-10 is touched by only 39% of
+        # users and covers 0.39% of ratings, against 87% and 2.87% for the
+        # most-rated top-10. Backtesting the popularity strategy against a list
+        # most users never touch drove pop_score to 0.0 for the majority, so
+        # the `popularity` label was largely assigned by the all-zero tie-break
+        # in select_best_strategy() rather than by winning on merit.
+        if ratings_df is not None and not ratings_df.empty:
+            counts = ratings_df["movieId"].value_counts().head(10)
+            self.top_popular_movies = {int(m) for m in counts.index}
+            return
+
         if "popularity" in movies_df.columns and "movieId" in movies_df.columns:
             top = movies_df.nlargest(10, "popularity")["movieId"]
             self.top_popular_movies = set(top)
             return
 
-        # Fallback for callers without TMDB metadata (e.g. unit tests with a
-        # minimal movies_df): a Bayesian volume-weighted average over ratings,
-        # so a handful of 5-star ratings can't outrank a movie with broad support.
-        movie_stats = ratings_df.groupby("movieId")["rating"].agg(["mean", "count"])
-        if movie_stats.empty:
-            self.top_popular_movies = set()
-            return
-        # Mean across all individual ratings (not mean-of-per-movie-means,
-        # which would itself be skewed by the same low-vote movies this
-        # weighting is meant to correct for).
-        global_mean = ratings_df["rating"].mean()
-        min_votes = movie_stats["count"].median()
-        weighted = (
-            movie_stats["count"] / (movie_stats["count"] + min_votes) * movie_stats["mean"]
-            + min_votes / (movie_stats["count"] + min_votes) * global_mean
-        )
-        self.top_popular_movies = set(weighted.nlargest(10).index)
+        # Neither ratings nor TMDB metadata: nothing can be called popular.
+        # (The previous Bayesian volume-weighted-average branch became
+        # unreachable once rating counts took priority -- it needed ratings,
+        # but is only reached when there are none.)
+        self.top_popular_movies = set()
 
     def _build_content_based(self, movies_df: pd.DataFrame) -> None:
         self.tfidf_matrix = None

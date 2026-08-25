@@ -55,10 +55,14 @@ def ratings_df():
         {"userId": 6, "movieId": 4, "rating": 5.0},
         {"userId": 6, "movieId": 5, "rating": 4.5},
         {"userId": 6, "movieId": 1, "rating": 2.0},
-        # User 7 exists so movies 4 and 5 have a rating count above the floor,
-        # leaving movie 6 (never rated) as the unambiguously rarest item.
+        # User 7 exists so movies 4 and 5 have a rating count above the floor.
         {"userId": 7, "movieId": 4, "rating": 4.0},
         {"userId": 7, "movieId": 5, "rating": 3.0},
+        # Movie 6 gets a single rating so it can enter the popularity source at
+        # all -- that source now ranks by observed rating count, so a movie
+        # nobody has rated is correctly not "popular". Its lone rating plus the
+        # catalog's lowest vote_count still leave it the rarest item by far.
+        {"userId": 8, "movieId": 6, "rating": 4.0},
     ]
     df = pd.DataFrame(rows)
     df["timestamp"] = "2020-01-01"

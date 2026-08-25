@@ -22,7 +22,8 @@ The system is built as three engines, in this order:
    baseline) fits them best, trained on backtested per-user hit-rates.
 3. **Multi-Objective Hybrid Ranking Engine** — re-ranks candidates on six weighted
    objectives (relevance, diversity, novelty, coverage, popularity/quality, predicted
-   rating), with weights tunable via `eval_config.yaml`.
+   rating), with weights and a genre-overlap relevance gate tunable via
+   `eval_config.yaml`.
 
 ## Datasets
 
@@ -49,6 +50,7 @@ src/ir_engine/          <- TF-IDF + cosine similarity + Trie autocomplete (Modul
 src/strategy_selector/  <- per-user strategy classifier (Module 3)
 src/ranking_engine/     <- multi-objective hybrid ranking (Module 4)
 src/evaluation/         <- metrics (search, recommendation, ML, system)
+scripts/                <- per-module verification scripts (run with PYTHONPATH=.)
 tests/                  <- pytest unit tests, one file per module
 notebooks/              <- exploratory analysis
 .gitignore              <- excludes datasets and processed artifacts
@@ -87,16 +89,19 @@ requirements.txt
   title autocomplete. 18/18 unit tests passing.
 - [x] **Module 3 — Adaptive ML Strategy Selection Engine**: per-user profile features,
   backtest-driven strategy labeling, and a RandomForest classifier predicting
-  content-based / collaborative / popularity per user. 31/31 unit tests passing.
+  content-based / collaborative / popularity per user. 41/41 unit tests passing.
   Partially effective — see [Module 3 results](#module-3-results) below.
-- [ ] Module 4 — Multi-Objective Hybrid Ranking Engine
+- [x] **Module 4 — Multi-Objective Hybrid Ranking Engine**: blends IR and
+  strategy-selected candidates, then re-ranks them on six weighted objectives with a
+  genre-overlap relevance gate. 72/72 unit tests passing.
+  See [Module 4 results](#module-4-results) below.
 - [ ] Evaluation suite (see `eval_config.yaml` for exact metric names)
 
-**Test suite:** 55/55 passing (`python -m pytest tests/ -q`).
+**Test suite:** 137/137 passing (`python -m pytest tests/ -q`).
 
 ## Running the engines
 
-Both verification scripts need the repo root on the import path:
+All verification scripts need the repo root on the import path:
 
 ```bash
 # Module 2 — search, autocomplete, movie-to-movie similarity
@@ -105,10 +110,20 @@ PYTHONPATH=. python scripts/verify_ir_engine.py
 # Module 3 — profile features, strategy labeling, classifier training + metrics
 # Optional arg = number of users to sample (default 100)
 PYTHONPATH=. python scripts/verify_strategy_selector.py 5000
+
+# Module 4 — candidate blending, six-objective ranking, weight sensitivity,
+# the genre-relevance gate, and the cold-start path
+# Optional arg = number of ratings to load (default 1,000,000)
+PYTHONPATH=. python scripts/verify_ranking_engine.py
 ```
 
 The Module 3 script trains and saves the classifier to
-`data/processed/strategy_classifier.pkl`.
+`data/processed/strategy_classifier.pkl`. Module 4 loads the Module 2 and Module 3
+artifacts from disk rather than refitting them, so run those two first.
+
+The SMOTE investigation behind Module 3's documented limitations can be reproduced with
+`scripts/compare_smote.py`, `scripts/smote_seed_robustness.py` and
+`scripts/smote_vs_class_weight.py`.
 
 ## Module 3 results
 
@@ -139,9 +154,67 @@ with low recall (0.086). `collaborative`'s high raw F1 is mostly majority-class 
 not discrimination.
 
 This is **partially effective personalization**, not a solved classification problem.
-Module 4 should therefore treat the predicted strategy as a weighted prior rather than
-a hard routing decision. Full limitation write-up, including the remedies tried and
+Module 4 therefore treats the predicted strategy as a weighted prior rather than a hard
+routing decision. Full limitation write-up, including the four remedies tried and
 rejected, is in [`DATASET_MIGRATION.md`](./DATASET_MIGRATION.md#known-limitations--module-3-adaptive-ml-strategy-selection-engine).
+
+SMOTE oversampling was investigated as a fourth remedy and **ships disabled**
+(`fit(..., use_smote=False)`). Across 10 seeds it lifted `content_based` F1 by +0.038,
+but ROC-AUC stayed flat (0.605–0.627) across SMOTE *and* every `class_weight` variant —
+rebalancing shifts the decision threshold without improving the model's probability
+ranking. Since Module 4 consumes the classifier's `confidence` rather than its hard
+label, a threshold shift buys nothing there while costing accuracy in 10/10 seeds.
+
+## Module 4 results
+
+The ranking engine takes a per-user candidate pool and re-ranks it on six objectives.
+
+**Candidate blending.** Three sources contribute to every pool — IR/content similarity
+(Module 2), user-user collaborative filtering, and popularity. Module 3's predicted
+strategy does not route between them; it shifts how much each one contributes, weighted
+by classifier confidence, degrading toward a `collaborative`-heavy prior when confidence
+is low.
+
+**Greedy selection.** Two of the six objectives (diversity, coverage) are defined
+relative to what has already been picked, so the engine selects sequentially — rescoring
+every remaining candidate against the current list at each step — rather than scoring
+once and sorting.
+
+**Genre-overlap relevance gate.** TF-IDF matches on shared vocabulary, which is not the
+same as shared tone: the neighbours of *Toy Story* include *Silent Night, Deadly Night 5:
+The Toy Maker* and *Dollman vs. Demonic Toys*, which match on the word "toy" alone. The
+gate scales a candidate's IR relevance by its Jaccard genre overlap with the seed it was
+retrieved from:
+
+```
+gate = floor + (1 - floor) * jaccard(genres(candidate), genres(seed))
+```
+
+Tunable via `ranking_objectives.genre_relevance_gate.floor` in `eval_config.yaml`
+(default **0.25**). `1.0` disables the gate; `0.0` fully suppresses zero-overlap
+candidates. Movies with no genre metadata are never penalised — an unknown genre is not
+evidence of a mismatch. Only IR candidates are gated; collaborative and popularity
+candidates have no seed movie to compare against, so the cold-start path (where no seeds
+exist) is provably unaffected.
+
+Effect on the *Toy Story* pool — candidates sharing **no** genre with the seed, in the
+top 10:
+
+| | Gate disabled | Gate enabled (floor 0.25) |
+|---|---|---|
+| Zero-overlap titles in top 10 | 3 | 1 |
+| Rank of *Silent Night, Deadly Night 5* | #2 | #7 |
+| Genuine *Toy Story* entries | #1, #5 | #1, #2, #3 |
+
+The one surviving mismatch at #7 is expected behaviour, not a gate failure: its
+`coverage` score is 1.000 because horror/sci-fi are genres nothing above it covers, so
+the coverage objective actively rewards it. Its relevance was cut from 0.735 to 0.226.
+
+**Weight sensitivity.** Raising diversity 0.15 → 0.60 and coverage 0.10 → 0.40 lifts
+mean diversity 0.959 → 0.977 and genre spread 15 → 16 distinct genres, paid for with
+mean relevance 0.548 → 0.460 — the trade-off is visible and moves in the expected
+direction. Each of the six objectives, weighted alone, produces a visibly different
+top-3.
 
 ## Evaluation
 

@@ -40,6 +40,18 @@ system:
     - "Throughput"
 
 ranking_objectives:
+  # Relevance gate for the IR candidate source. TF-IDF over
+  # overview + genres + keywords can rank a horror film highly against an
+  # animated family film purely on a shared keyword ("toy"). This attenuates a
+  # candidate's IR relevance in proportion to how little genre overlap it has
+  # with the seed movie it was retrieved from.
+  #   floor = multiplier applied at ZERO genre overlap.
+  #   1.0 disables the gate entirely; 0.0 drops zero-overlap candidates outright.
+  # Only affects content/IR candidates -- collaborative and popularity
+  # candidates have no seed movie to compare against.
+  genre_relevance_gate:
+    floor: 0.25
+
   # The Multi-Objective Hybrid Ranking Engine's six weighted objectives.
   # Keep these as tunable config, never hardcoded in the ranking logic.
   weights:

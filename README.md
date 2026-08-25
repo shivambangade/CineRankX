@@ -25,6 +25,9 @@ The system is built as three engines, in this order:
    rating), with weights and a genre-overlap relevance gate tunable via
    `eval_config.yaml`.
 
+An **evaluation suite** (`src/evaluation/`) ties the three engines together, computing
+every KPI in `eval_config.yaml` and rendering them as one results table.
+
 ## Datasets
 
 - **Primary — [MovieLens 20M](https://grouplens.org/datasets/movielens/)**:
@@ -95,9 +98,13 @@ requirements.txt
   strategy-selected candidates, then re-ranks them on six weighted objectives with a
   genre-overlap relevance gate. 72/72 unit tests passing.
   See [Module 4 results](#module-4-results) below.
-- [ ] Evaluation suite (see `eval_config.yaml` for exact metric names)
+- [x] **Evaluation suite**: all 23 KPIs from `eval_config.yaml` across four groups
+  (search, recommendation, machine learning, system), keyed by the exact metric-name
+  strings so report and code cannot drift. 71/71 unit tests passing.
+  See [Final KPI report](#final-kpi-report) below.
 
-**Test suite:** 137/137 passing (`python -m pytest tests/ -q`).
+**Test suite:** 210/210 passing (`python -m pytest tests/ -q`) — 6 ingestion, 18 IR
+engine, 43 strategy selector, 72 ranking engine, 71 evaluation.
 
 ## Running the engines
 
@@ -121,6 +128,17 @@ The Module 3 script trains and saves the classifier to
 `data/processed/strategy_classifier.pkl`. Module 4 loads the Module 2 and Module 3
 artifacts from disk rather than refitting them, so run those two first.
 
+Then generate the full KPI report:
+
+```bash
+# Every metric in eval_config.yaml, from real data, in one table
+# Optional args = ratings to load (default 400,000), users to evaluate (default 300)
+PYTHONPATH=. python scripts/generate_kpi_report.py 900000 1500
+```
+
+It refuses to finish if any KPI defined in `eval_config.yaml` is missing from the output.
+Redirect it into `reports/` (gitignored) to keep a copy.
+
 The SMOTE investigation behind Module 3's documented limitations can be reproduced with
 `scripts/compare_smote.py`, `scripts/smote_seed_robustness.py` and
 `scripts/smote_vs_class_weight.py`.
@@ -128,35 +146,62 @@ The SMOTE investigation behind Module 3's documented limitations can be reproduc
 ## Module 3 results
 
 Measured on a 5,000-user sample (750,512 ratings), 5-split label averaging,
-1,000-user held-out test set:
+1,000-user held-out test set, **after** the popularity-source correction (see below):
 
 | Metric | Value |
 |---|---|
-| Accuracy | 0.7960 |
-| Majority-class baseline | 0.8410 |
-| Lift over baseline | −0.0450 |
-| ROC-AUC | 0.6421 |
-| F1 (weighted) | 0.7657 |
+| Accuracy | 0.6600 |
+| Majority-class baseline | 0.5160 |
+| **Lift over baseline** | **+0.1440** |
+| ROC-AUC | 0.6841 |
+| F1 (weighted) | 0.6513 |
 
-Per-class precision against each class's own base rate in the test set:
+Per-class:
 
-| Strategy | Support | Base rate | Precision | Ratio |
+| Strategy | Support | Precision | Recall | F1 |
 |---|---|---|---|---|
-| `collaborative` | 841 | 84.1% | 0.8540 | 1.02× |
-| `content_based` | 70 | 7.0% | 0.2069 | **2.96×** |
-| `popularity` | 89 | 8.9% | 0.1132 | 1.27× |
+| `collaborative` | 516 | 0.6796 | 0.7112 | 0.6951 |
+| `popularity` | 453 | 0.6454 | 0.6468 | **0.6461** |
+| `content_based` | 31 | 0.0000 | 0.0000 | **0.0000** |
 
-Read honestly: overall accuracy sits *below* the majority-class baseline, partly by
-design (`class_weight='balanced'` trades majority accuracy for minority recall). The
-model is nonetheless learning real signal — ROC-AUC 0.64 is well above chance, and
-`content_based` predictions land ~3× more often than its base rate would give, though
-with low recall (0.086). `collaborative`'s high raw F1 is mostly majority-class mass,
-not discrimination.
+Label distribution: `collaborative` 51.6%, `popularity` 45.3%, `content_based` 3.1%.
 
-This is **partially effective personalization**, not a solved classification problem.
-Module 4 therefore treats the predicted strategy as a weighted prior rather than a hard
-routing decision. Full limitation write-up, including the four remedies tried and
-rejected, is in [`DATASET_MIGRATION.md`](./DATASET_MIGRATION.md#known-limitations--module-3-adaptive-ml-strategy-selection-engine).
+### The popularity-source correction
+
+Both Module 3's backtest and Module 4's candidate generator originally ranked popularity
+by TMDB's `popularity` column. TMDB popularity is a live, recency-weighted metric while
+MovieLens 20M's ratings stop in 2015, so the two disagree almost completely — the TMDB
+top-10 was touched by only **39%** of users and covered **0.39%** of ratings, against
+**87%** and **2.87%** for the most-rated top-10. Both now rank by observed rating counts.
+
+| Metric | Before | After |
+|---|---|---|
+| Accuracy | 0.7960 | 0.6600 |
+| Majority-class baseline | 0.8410 | 0.5160 |
+| **Lift over baseline** | **−0.0450** | **+0.1440** |
+| ROC-AUC | 0.6421 | 0.6841 |
+| `popularity` F1 | ~0.1103 | **0.6461** |
+| `content_based` F1 | 0.1212 | **0.0000** |
+
+Read honestly: raw accuracy *fell*, but the old 0.796 was mostly majority-class mass on
+an 84%-imbalanced problem. The balance is now 52/45/3, so the baseline itself drops to
+0.516 and the classifier clears it by **+0.144** — the first time in this project it has
+beaten "always guess the majority." ROC-AUC confirms the improvement independently.
+
+`popularity` improved 5.9× because the backtest previously scored it against a top-10
+most users never touched, so `pop_score` was 0.0 for the majority and the label was
+assigned largely by a tie-break rather than by winning on merit.
+
+**Disclosed regression:** `content_based` fell to F1 0.0000 at 3.1% prevalence — the
+classifier now predicts it essentially never. Partly honest reallocation (users labeled
+`content_based` only because `pop_score` was artificially 0 now correctly resolve to
+`popularity`), but the class is now below learnability at this data scale. Net effect:
+two of three classes are genuinely predicted where one was before.
+
+This remains **partially effective personalization**, not a solved classification
+problem. Module 4 therefore treats the predicted strategy as a weighted prior rather than
+a hard routing decision. Full write-up, including the four remedies tried and rejected,
+is in [`DATASET_MIGRATION.md`](./DATASET_MIGRATION.md#known-limitations--module-3-adaptive-ml-strategy-selection-engine).
 
 SMOTE oversampling was investigated as a fourth remedy and **ships disabled**
 (`fit(..., use_smote=False)`). Across 10 seeds it lifted `content_based` F1 by +0.038,
@@ -211,10 +256,108 @@ The one surviving mismatch at #7 is expected behaviour, not a gate failure: its
 the coverage objective actively rewards it. Its relevance was cut from 0.735 to 0.226.
 
 **Weight sensitivity.** Raising diversity 0.15 → 0.60 and coverage 0.10 → 0.40 lifts
-mean diversity 0.959 → 0.977 and genre spread 15 → 16 distinct genres, paid for with
-mean relevance 0.548 → 0.460 — the trade-off is visible and moves in the expected
+mean diversity 0.952 → 0.972 and genre spread 13 → 16 distinct genres, paid for with
+mean relevance 0.814 → 0.657 — the trade-off is visible and moves in the expected
 direction. Each of the six objectives, weighted alone, produces a visibly different
 top-3.
+
+## Final KPI report
+
+Produced by `scripts/generate_kpi_report.py` on a 900,000-rating sample (6,034 users),
+1,500 users evaluated, 20 search queries, K = [5, 10, 20]. All 23 metrics come from
+`eval_config.yaml` by their exact names.
+
+### 1. Search — Module 2, Classical IR Engine
+
+| Metric | Value |
+|---|---|
+| Precision@10 | 0.4100 |
+| Recall@10 | 0.0101 |
+| MRR | 0.4396 |
+| NDCG | 0.4123 |
+| Search Latency | 7.94 ms (p95 8.38 ms) |
+
+There is no hand-labeled relevance set, so relevance uses the documented proxy: a result
+is relevant if it shares **at least one genre or keyword** with the query. That marks on
+average **1,812 of 26,743** movies relevant per query, so `Recall@10` is bounded above by
+10/1,812 and measures catalog breadth rather than retrieval quality. `Precision@10` is
+correspondingly generous — one shared genre is a low bar.
+
+### 2. Recommendation — Module 4, Multi-Objective Hybrid Ranking
+
+| Metric | K=5 | K=10 | K=20 |
+|---|---|---|---|
+| Precision@K | 0.1944 | 0.1529 | 0.1104 |
+| Recall@K | 0.1130 | 0.1732 | 0.2381 |
+| F1 | 0.1167 | 0.1308 | 0.1226 |
+
+| Metric | Value |
+|---|---|
+| MAP | 0.1174 |
+| Coverage | 0.0713 |
+| Diversity | 0.8322 |
+| Novelty | 0.1715 |
+| Cold-Start Accuracy | 0.6061 |
+
+**Cold-start:** CineRankX 0.6061 vs. popularity baseline 0.5859 → lift **+0.0202**.
+
+Two caveats, both recorded in `DATASET_MIGRATION.md`:
+
+- MovieLens 20M only admits users with ≥20 ratings, so it contains **no natural
+  cold-start users**. The cohort is *simulated* — real users whose profiles are truncated
+  to 5 ratings, scored on their untouched held-out items. Other users keep full
+  histories so the collaborative neighbourhood stays realistic. The report labels which
+  mode produced the figure.
+- Since the popularity-source correction, the baseline's top-20 is a **strict subset of
+  Module 4's own candidate pool**. The comparison is therefore an *ablation* of the
+  ranking layer — "does the six-objective ranker order a shared pool better than plain
+  popularity rank?" — not a test against an independent baseline.
+
+### 3. Machine Learning — Module 3, Strategy Selection Classifier
+
+| Metric | Value |
+|---|---|
+| Accuracy | 0.6333 (majority baseline 0.4833) |
+| Precision | 0.6160 |
+| Recall | 0.6333 |
+| F1 | 0.6245 |
+| ROC-AUC | 0.6432 |
+
+Confusion Matrix (rows = true, columns = predicted):
+
+| | collaborative | content_based | popularity |
+|---|---|---|---|
+| **collaborative** | 91 | 3 | 46 |
+| **content_based** | 10 | 0 | 5 |
+| **popularity** | 42 | 4 | 99 |
+
+*(This run uses 1,500 users; the 5,000-user figures in [Module 3 results](#module-3-results)
+are the headline numbers for that engine.)*
+
+### 4. System — end-to-end instrumentation
+
+| Metric | Value |
+|---|---|
+| Response Time | 22.51 ms/call |
+| Memory Usage | 457.46 MB (peak RSS) |
+| CPU Usage | 90.1% of one core (7.5% of 12 cores) |
+| Throughput | 46.2 ops/sec |
+
+| Operation | ms/call | p95 ms | ops/sec |
+|---|---|---|---|
+| IR search (Module 2) | 11.094 | 15.107 | 90.1 |
+| IR similar_to (Module 2) | 12.433 | 17.765 | 80.4 |
+| Strategy predict (Module 3) | 48.485 | 69.554 | 20.6 |
+| Rank top-10 (Module 4) | 18.038 | 19.267 | 55.4 |
+
+### Known trade-off
+
+The popularity-source correction improved accuracy metrics (Precision@10 0.1389 → 0.1529,
+MAP 0.1124 → 0.1174, cold-start lift −0.0303 → +0.0202) while **Coverage fell 0.0964 →
+0.0713** and **Novelty fell 0.2440 → 0.1715**. The popularity source now proposes
+genuinely widely-rated films, which are by definition less novel and recur across users.
+Better hit-rates, less discovery. The six objective weights in `eval_config.yaml` are the
+lever for rebalancing this.
 
 ## Evaluation
 

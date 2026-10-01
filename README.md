@@ -112,6 +112,22 @@ engine, 43 strategy selector, 72 ranking engine, 71 evaluation.
 
 ## Running the engines
 
+### Recommendation UI
+
+Start the local dashboard with `streamlit run app.py`. In **Run engine**, enter a
+MovieLens user ID to see their ranked list, per-movie score breakdown, and a CSV
+download. This requires `data/processed/movies_merged.csv`, ratings from the
+ingestion pipeline (or `newdata/movielens/rating.csv`), and optionally the IR and
+classifier artifacts created by the verification scripts. The UI loads the first
+400,000 ratings to keep memory bounded; choose a user within that sample. If
+the IR or classifier artifact is missing, ranking still works with the remaining
+candidate sources and default strategy blend.
+
+**Upload ranked CSV** also accepts a CSV exported from `MultiObjectiveRanker.rank()`
+without needing local datasets. The displayed KPIs (movie count, mean rank score,
+mean relevance, mean novelty) describe only that output list. Held-out Precision@K,
+Recall@K and catalog coverage require the separate evaluation suite below.
+
 All verification scripts need the repo root on the import path:
 
 ```bash

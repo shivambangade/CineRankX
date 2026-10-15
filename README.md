@@ -45,7 +45,7 @@ See [`DATASET_MIGRATION.md`](./DATASET_MIGRATION.md) for dataset rationale and m
 
 ## Tech stack
 
-Python, VS Code, Pandas, NumPy, Scikit-learn, NLTK, Matplotlib, Claude Code (build assistant).
+Python, VS Code, Pandas, NumPy, Scikit-learn, NLTK, Matplotlib.
 
 ## Project structure
 

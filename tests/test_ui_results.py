@@ -59,3 +59,22 @@ def test_empty_output_has_no_kpis(ranked):
     assert output_kpis(result) == {
         "titles": 0, "mean_score": 0.0, "mean_relevance": 0.0, "mean_novelty": 0.0,
     }
+
+
+def test_split_title_extracts_year():
+    from src.ui.results import split_title
+    assert split_title("Toy Story (1995)") == ("Toy Story", "1995")
+    assert split_title("No Year") == ("No Year", "")
+
+
+def test_reason_uses_top_objectives(ranked):
+    from src.ui.results import reason_for
+    row = next(prepare_results(ranked).itertuples(index=False))
+    assert reason_for(row).startswith("Ranked on strong ")
+
+
+def test_genres_lookup_handles_missing_catalog():
+    from src.ui.results import genres_lookup
+    assert genres_lookup(None) == {}
+    movies = pd.DataFrame({"movieId": [1], "genres": ["Comedy|Drama"]})
+    assert genres_lookup(movies) == {1: ["Comedy", "Drama"]}

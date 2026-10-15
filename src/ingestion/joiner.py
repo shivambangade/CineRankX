@@ -56,6 +56,8 @@ def join_movielens_tmdb(
         "popularity",
         "text_chunk",
     ]
+    # Optional TMDB display metadata (posters, language, release date) for the UI.
+    keep_cols += [c for c in ("release_date", "original_language", "poster_path") if c in merged.columns]
     result = merged[keep_cols].reset_index(drop=True)
 
     report = {

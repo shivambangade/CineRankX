@@ -146,3 +146,31 @@ print(f"\nRun parameters: {len(ratings_df):,} ratings loaded, {len(eval_user_ids
       f"evaluated, {len(QUERIES)} search queries, K values {k_values}.")
 if not classifier_loaded:
     print("Note: no saved classifier was found on disk; one was trained fresh for this run.")
+
+# Machine-readable copy for the Streamlit KPI screen (reports/ is gitignored).
+import json
+import os
+
+import numpy as np
+
+
+def _plain(value):
+    if isinstance(value, dict):
+        return {str(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return value if isinstance(value, (int, float, str, bool, type(None))) else str(value)
+
+
+os.makedirs("reports", exist_ok=True)
+with open("reports/kpi_report.json", "w", encoding="utf-8") as fh:
+    json.dump(_plain({**{k: v for k, v in report.items() if k != "_detail"},
+                      "detail": {g: {k: v for k, v in report["_detail"][g].items()
+                                     if k not in ("per_user", "cold_start_detail")}
+                                 for g in ("recommendation", "machine_learning")},
+                      "run": {"ratings": len(ratings_df), "users": len(eval_user_ids),
+                              "queries": len(QUERIES), "k_values": list(k_values)}}), fh, indent=2)

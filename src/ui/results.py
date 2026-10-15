@@ -1,5 +1,7 @@
 """Validate ranked output and summarize metrics available from that output."""
 #User ID to recommendation 
+import re
+
 import numpy as np
 import pandas as pd
 
@@ -46,3 +48,39 @@ def output_kpis(results: pd.DataFrame) -> dict[str, float | int]:
         "mean_relevance": float(results["relevance"].mean()),
         "mean_novelty": float(results["novelty"].mean()),
     }
+
+
+OBJECTIVE_HELP = {
+    "relevance": "How closely a title matches the user's taste signals.",
+    "diversity": "Penalises near-duplicate genres within the list.",
+    "novelty": "Favours less-rated titles the user is less likely to know.",
+    "coverage": "Spreads recommendations across more of the catalog.",
+    "popularity_quality": "Bayesian-weighted community rating and popularity.",
+    "predicted_rating": "Baseline-predicted rating for this user, scaled to 0-1.",
+}
+
+
+def objective_label(name: str) -> str:
+    return name.replace("_", " ").title()
+
+
+def split_title(title: str) -> tuple[str, str]:
+    """Return (name, year) from a MovieLens title like 'Toy Story (1995)'."""
+    match = re.search(r"^(.*?)\s*\((\d{4})\)\s*$", str(title))
+    return (match.group(1), match.group(2)) if match else (str(title), "")
+
+
+def reason_for(row, top_n: int = 2) -> str:
+    """Plain-language explanation built only from this row's real objective scores."""
+    ranked = sorted(OBJECTIVES, key=lambda name: getattr(row, name), reverse=True)[:top_n]
+    parts = " and ".join(f"{objective_label(n).lower()} ({getattr(row, n):.2f})" for n in ranked)
+    source = f", sourced from {row.sources}" if row.sources else ""
+    return f"Ranked on strong {parts}{source}."
+
+
+def genres_lookup(movies: pd.DataFrame | None) -> dict[int, list[str]]:
+    """movieId -> genre list from the catalog's pipe-separated MovieLens genres."""
+    if movies is None or "genres" not in movies.columns:
+        return {}
+    return {int(m): [g for g in str(v).split("|") if g and g != "(no genres listed)"]
+            for m, v in zip(movies["movieId"], movies["genres"])}

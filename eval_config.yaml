@@ -61,3 +61,17 @@ ranking_objectives:
     coverage: 0.10
     popularity_quality: 0.15
     predicted_rating: 0.15
+
+strategy_selector:
+  # Labelling and evaluation settings for the Adaptive Strategy Selector.
+  # holdout_fraction: share of each user's ratings hidden from BOTH the profile
+  #   features and the strategy backtest's training data; it is the backtest's
+  #   test set, so features can never see the ratings that decided the label.
+  # label_margin: a user is kept only if the best strategy's hit-rate beats the
+  #   runner-up by at least this much (hit-rates are in [0, 1]). All-zero users
+  #   are always dropped. 0 keeps every user that has a strict winner.
+  holdout_fraction: 0.2
+  label_margin: 0.02
+  min_history: 30
+  max_history: 1000
+  cv_folds: 5

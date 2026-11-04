@@ -136,6 +136,21 @@ class StrategyClassifier:
 
         return metrics
 
+    def fit_full(self, features_df: pd.DataFrame, labels_df: pd.DataFrame, estimator,
+                 use_smote: bool = False) -> None:
+        """Fit a chosen estimator on ALL given users (no hold-out) for deployment.
+
+        Evaluation happens elsewhere (model_selection); this only produces the
+        model that save()/load() persist, with the same feature/label contract.
+        """
+        merged = features_df.merge(labels_df[["userId", "best_strategy"]], on="userId")
+        self.feature_names = [c for c in merged.columns if c not in ("userId", "best_strategy")]
+        X, self.label_encoder = merged[self.feature_names].fillna(0), LabelEncoder()
+        y = self.label_encoder.fit_transform(merged["best_strategy"])
+        if use_smote:
+            X, y, _ = self._resample_training_fold(X, y, list(self.label_encoder.classes_))
+        self.model = estimator.fit(X, y)
+
     @staticmethod
     def _resample_training_fold(X_train, y_train, classes_present: list) -> tuple:
         """SMOTE-oversample the training fold. Never called before the split.

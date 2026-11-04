@@ -101,7 +101,7 @@ apply_theme()
 header()
 
 if "nav" not in st.session_state:
-    st.session_state["nav"] = VIEWS.get(st.query_params.get("view"), VIEWS["run"])
+    st.session_state["nav"] = VIEWS.get(st.query_params.get("view") or "", VIEWS["run"])
 st.segmented_control("Section", list(VIEWS.values()), key="nav", on_change=sync_view,
                      label_visibility="collapsed")
 view = LABEL_TO_VIEW.get(st.session_state.get("nav") or VIEWS["run"], "run")

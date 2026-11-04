@@ -10,8 +10,10 @@ Requires the Module 1/2/3 artifacts in data/processed/ (run the ingestion
 pipeline and the Module 2/3 verification scripts first).
 """
 
+import json
 import sys
 import time
+from pathlib import Path
 
 import pandas as pd
 
@@ -25,16 +27,15 @@ from src.evaluation import (
     missing_from,
     render,
 )
-from src.evaluation.ml_metrics import to_report_names
 from src.evaluation.search_metrics import build_relevance_index
 from src.ir_engine import IREngine
 from src.ranking_engine import MultiObjectiveRanker
 from src.strategy_selector import (
     StrategyClassifier,
     extract_profile_features,
-    label_users_with_best_strategy,
 )
 
+EVAL_PATH = Path("data/processed/strategy_eval.json")
 N_RATINGS = int(sys.argv[1]) if len(sys.argv) > 1 else 400_000
 N_USERS = int(sys.argv[2]) if len(sys.argv) > 2 else 300
 
@@ -88,16 +89,17 @@ eval_user_ids = [int(u) for u in ratings_df["userId"].unique()[:N_USERS]]
 user_ratings = ratings_df[ratings_df["userId"].isin(eval_user_ids)]
 
 features = extract_profile_features(user_ratings, movies_df)
-_t = time.time()
-labels = label_users_with_best_strategy(user_ratings, movies_df, test_fraction=0.2)
-log(f"labeled {len(labels)} users in {time.time() - _t:.0f}s")
-
-fresh_clf = StrategyClassifier()
-ml_raw = fresh_clf.fit(features, labels)
-ml_results = to_report_names(ml_raw)
-ml_results.update({k: v for k, v in ml_raw.items() if k not in ml_results})
-log(f"accuracy {ml_raw['accuracy']:.4f} vs majority baseline "
-    f"{ml_raw['majority_baseline_accuracy']:.4f}")
+# ML KPIs come from scripts/train_strategy_selector.py: users it never trained on
+# (untouched held-out split), labelled by a leak-free profile/holdout backtest.
+if not (EVAL_PATH.exists() and classifier_loaded):
+    raise SystemExit("Strategy selector not trained -- run scripts/train_strategy_selector.py first")
+selector_eval = json.loads(EVAL_PATH.read_text(encoding="utf-8"))
+ml_results = selector_eval["machine_learning"]
+fresh_clf = clf
+log(f"strategy selector ({selector_eval['selected_model']}): held-out accuracy "
+    f"{ml_results['Accuracy']:.4f} vs majority baseline {ml_results['majority_baseline_accuracy']:.4f}, "
+    f"balanced accuracy {ml_results['balanced_accuracy']:.4f}, "
+    f"{selector_eval['n_dev'] + selector_eval['n_holdout']} labelled users")
 
 predictions = fresh_clf.predict(features)
 strategies = {

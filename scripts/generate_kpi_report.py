@@ -30,10 +30,9 @@ from src.evaluation import (
 from src.evaluation.search_metrics import build_relevance_index
 from src.ir_engine import IREngine
 from src.ranking_engine import MultiObjectiveRanker
-from src.strategy_selector import (
-    StrategyClassifier,
-    extract_profile_features,
-)
+from src.strategy_selector import StrategyClassifier
+from src.strategy_selector.config import load_selector_config
+from src.strategy_selector.strategy_context import build_features, load_context
 
 EVAL_PATH = Path("data/processed/strategy_eval.json")
 N_RATINGS = int(sys.argv[1]) if len(sys.argv) > 1 else 400_000
@@ -88,13 +87,21 @@ print("\n[2/4] Machine learning metrics (strategy classifier)...", flush=True)
 eval_user_ids = [int(u) for u in ratings_df["userId"].unique()[:N_USERS]]
 user_ratings = ratings_df[ratings_df["userId"].isin(eval_user_ids)]
 
-features = extract_profile_features(user_ratings, movies_df)
 # ML KPIs come from scripts/train_strategy_selector.py: users it never trained on
 # (untouched held-out split), labelled by a leak-free profile/holdout backtest.
 if not (EVAL_PATH.exists() and classifier_loaded):
     raise SystemExit("Strategy selector not trained -- run scripts/train_strategy_selector.py first")
 selector_eval = json.loads(EVAL_PATH.read_text(encoding="utf-8"))
+context = load_context()
+if context is None:
+    raise SystemExit("Strategy context missing -- run scripts/train_strategy_selector.py first")
+selector_cfg = load_selector_config()
+features = build_features(user_ratings, movies_df, context, selector_cfg["inner_splits"],
+                          selector_cfg["inner_fraction"])
 ml_results = selector_eval["machine_learning"]
+ml_results.update({"selected_model": selector_eval["selected_model"], "latency_ms": selector_eval.get("latency_ms"),
+                   "label_reliability": selector_eval.get("label_reliability"),
+                   "label_cleaning": selector_eval.get("label_cleaning"), "ablation": selector_eval.get("ablation")})
 fresh_clf = clf
 log(f"strategy selector ({selector_eval['selected_model']}): held-out accuracy "
     f"{ml_results['Accuracy']:.4f} vs majority baseline {ml_results['majority_baseline_accuracy']:.4f}, "

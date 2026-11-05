@@ -208,8 +208,10 @@ class StrategyClassifier:
             raise ValueError("Model not fitted. Call fit() first.")
 
         X = features_df[self.feature_names].fillna(0)
-        predictions = self.model.predict(X)
-        probabilities = self.model.predict_proba(X).max(axis=1)
+        # One forward pass: predict() would recompute the same probabilities a second time.
+        proba = self.model.predict_proba(X)
+        predictions = self.model.classes_[proba.argmax(axis=1)]
+        probabilities = proba.max(axis=1)
 
         result = pd.DataFrame(
             {
@@ -237,6 +239,9 @@ class StrategyClassifier:
                 self.model = pickle.load(f)
             with open(_LE_PATH, "rb") as f:
                 self.label_encoder, self.feature_names = pickle.load(f)
+            # Single-user inference: thread-pool start-up costs more than the trees themselves.
+            if hasattr(self.model, "n_jobs"):
+                self.model.n_jobs = 1
             return True
         except Exception:
             return False

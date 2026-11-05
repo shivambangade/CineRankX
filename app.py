@@ -9,7 +9,9 @@ import streamlit as st
 
 from src.ranking_engine import MultiObjectiveRanker
 from src.ranking_engine.config import RankingWeights
-from src.strategy_selector import StrategyClassifier, extract_profile_features
+from src.strategy_selector import StrategyClassifier
+from src.strategy_selector.config import load_selector_config
+from src.strategy_selector.strategy_context import build_features, load_context
 from src.storage import DB_PATH, connect, db_ready, record_run
 from src.ui.kpi_view import render_report
 from src.ui.nav import LABEL_TO_VIEW, VIEWS, selected_user, sync_view
@@ -24,6 +26,7 @@ CATALOG = ROOT / "data/processed/movies_merged.csv"
 RATINGS = ROOT / "data/processed/ratings_clean.csv"
 RAW_RATINGS = ROOT / "newdata/movielens/rating.csv"
 REPORT = ROOT / "reports/kpi_report.json"
+COMPARISON = ROOT / "reports/strategy_comparison.json"
 RATINGS_LIMIT = 400_000
 
 
@@ -40,6 +43,12 @@ def load_engine():
     ranker = MultiObjectiveRanker(movies, ratings, ir_engine=ir_engine)
     classifier = StrategyClassifier()
     return movies, ratings, ranker, classifier if classifier.load() else None, ir_engine is not None
+
+
+@st.cache_resource(show_spinner=False)
+def strategy_context():
+    """Reference population the strategy-aware features are computed against (None if untrained)."""
+    return load_context()
 
 
 def engine_parts():
@@ -67,8 +76,11 @@ def recommend(user_id: int, k: int, weights: RankingWeights | None = None):
         if not 1 <= k <= 20:
             raise ValueError("Recommendations must be between 1 and 20.")
         strategy, confidence = None, 1.0
-        if classifier is not None:
-            profile = extract_profile_features(ratings[ratings["userId"] == user_id], movies)
+        context = strategy_context()
+        if classifier is not None and context is not None:
+            cfg = load_selector_config()
+            profile = build_features(ratings[ratings["userId"] == user_id], movies, context,
+                                     cfg["inner_splits"], cfg["inner_fraction"])
             prediction = classifier.predict(profile).iloc[0]
             strategy = str(prediction["predicted_strategy"])
             confidence = float(prediction["confidence"])
@@ -89,9 +101,9 @@ def db_connection():
 
 
 @st.cache_data(show_spinner=False)
-def load_report(mtime: float) -> dict | None:
+def load_report(mtime: float, path: str = str(REPORT)) -> dict | None:
     try:
-        return json.loads(REPORT.read_text(encoding="utf-8"))
+        return json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
@@ -132,7 +144,9 @@ try:
     elif view == "kpi":
         st.subheader("KPI benchmark suite")
         if report:
-            render_report(report, last_run_ms)
+            comparison = (load_report(COMPARISON.stat().st_mtime, str(COMPARISON))
+                          if COMPARISON.exists() else None)
+            render_report(report, last_run_ms, comparison)
         else:
             st.info("No offline report found. Run `PYTHONPATH=. python scripts/generate_kpi_report.py` "
                     "to compute the KPIs defined in eval_config.yaml.")

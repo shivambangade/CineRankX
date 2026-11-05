@@ -64,14 +64,40 @@ ranking_objectives:
 
 strategy_selector:
   # Labelling and evaluation settings for the Adaptive Strategy Selector.
-  # holdout_fraction: share of each user's ratings hidden from BOTH the profile
+  #   label_top_n / holdout_fraction: independent re-labelings of the same users agree only ~61%
+#   at top-10 / 20% holdout and ~66-79% with a larger budget / holdout, so these set how
+#   reliable (and how accuracy-bounded) the labels are.
+# holdout_fraction: share of each user's ratings hidden from BOTH the profile
   #   features and the strategy backtest's training data; it is the backtest's
   #   test set, so features can never see the ratings that decided the label.
   # label_margin: a user is kept only if the best strategy's hit-rate beats the
   #   runner-up by at least this much (hit-rates are in [0, 1]). All-zero users
   #   are always dropped. 0 keeps every user that has a strict winner.
-  holdout_fraction: 0.2
+  holdout_fraction: 0.3
   label_margin: 0.02
+  label_top_n: 30          # recommendation budget each strategy gets in the label backtest
+  inner_splits: 3          # backtest splits of the visible profile used for strategy-aware features
+  inner_fraction: 0.25
   min_history: 30
   max_history: 1000
   cv_folds: 5
+  # Content-based strategy used by the label backtest and the strategy-aware features. The rich
+  # bigram TF-IDF with a quality prior tripled held-out content hit-rate (scripts/content_experiments.py).
+  content_options: {vectorizer: rich, quality_alpha: 2.0}
+
+benchmark:
+  # Frozen evaluation benchmark shared by the baseline and CineRankX. The split is a
+  # deterministic hash of (user, movie, seed): it needs no stored state, never depends
+  # on file order or sample size, and the test interactions can never change by
+  # re-running or retraining. Changing seed/fractions creates a NEW benchmark.
+  seed: 20260101
+  train_fraction: 0.70
+  validation_fraction: 0.10        # remainder (0.20) is the test split
+  positive_threshold: 4.0          # a held-out rating >= this counts as "liked"
+  min_train_ratings: 20            # users need this many train ratings to be evaluated
+  overall_users: 2000              # test cohort, full train profile
+  cold_users: 1000                 # test cohort, profile truncated to cold_history ratings
+  tuning_users: 1000               # disjoint cohort scored on the VALIDATION split only
+  cold_history: 5
+  ks: [5, 10, 20]
+  headline_k: 10                   # "accuracy" = Hit Rate@headline_k

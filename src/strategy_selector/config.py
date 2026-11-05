@@ -5,11 +5,15 @@ from pathlib import Path
 import yaml
 
 _DEFAULTS = {
-    "holdout_fraction": 0.2,
+    "holdout_fraction": 0.3,
+    "label_top_n": 30,
+    "inner_splits": 3,
+    "inner_fraction": 0.25,
     "label_margin": 0.02,
     "min_history": 30,
     "max_history": 1000,
     "cv_folds": 5,
+    "content_options": None,   # None = the original TF-IDF content strategy
 }
 
 

@@ -33,14 +33,19 @@ class MultiObjectiveRanker:
         ir_engine=None,
         weights: RankingWeights | None = None,
         predictor: BaselinePredictor | None = None,
+        stats: CatalogStats | None = None,
+        build_generator: bool = True,
     ):
         self.movies_df = movies_df
         self.ir_engine = ir_engine
         self.weights = weights if weights is not None else RankingWeights.from_config()
-        self.stats = CatalogStats(movies_df, ratings_df)
+        self.stats = stats if stats is not None else CatalogStats(movies_df, ratings_df)
         self.predictor = predictor if predictor is not None else BaselinePredictor().fit(ratings_df)
-        self.generator = CandidateGenerator(
-            movies_df, ratings_df, ir_engine=ir_engine, stats=self.stats
+        # build_generator=False skips the (slow) built-in candidate generator for callers
+        # that always pass their own `candidates` to rank(), e.g. the evaluation benchmark.
+        self.generator = (
+            CandidateGenerator(movies_df, ratings_df, ir_engine=ir_engine, stats=self.stats)
+            if build_generator else None
         )
         self.titles = dict(zip(movies_df["movieId"].astype(int), movies_df["title"]))
 

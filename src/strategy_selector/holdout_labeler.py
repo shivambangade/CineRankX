@@ -34,14 +34,16 @@ def split_profile_holdout(ratings: pd.DataFrame, fraction: float,
     return ratings[~is_holdout].reset_index(drop=True), ratings[is_holdout].reset_index(drop=True)
 
 
-def label_holdout(profile: pd.DataFrame, holdout: pd.DataFrame, movies_df: pd.DataFrame) -> pd.DataFrame:
+def label_holdout(profile: pd.DataFrame, holdout: pd.DataFrame, movies_df: pd.DataFrame,
+                  top_n: int = 10, content_model=None) -> pd.DataFrame:
     """Hit-rate of each strategy on the holdout; raw winner uses the legacy tie-break."""
-    ctx = _BacktestContext(profile, movies_df)
+    ctx = _BacktestContext(profile, movies_df, top_n=top_n)
     hold_by_user = holdout.groupby("userId")["movieId"].apply(lambda s: s.values)
     rows = []
     for user_id, train in profile.groupby("userId"):
         test_ids = hold_by_user.get(user_id, np.array([]))
-        cb = _content_based_hit_rate(ctx, train, test_ids)
+        cb = (content_model.hit_rate(train, test_ids, top_n) if content_model is not None
+              else _content_based_hit_rate(ctx, train, test_ids))
         cf = _collaborative_hit_rate(ctx, user_id, test_ids)
         pop = _popularity_hit_rate(ctx, test_ids)
         rows.append({"userId": user_id, "best_strategy": select_best_strategy(cb, cf, pop),

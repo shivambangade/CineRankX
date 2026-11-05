@@ -38,7 +38,9 @@ def select_best_strategy(cb_score: float, cf_score: float, pop_score: float) -> 
 class _BacktestContext:
     """Structures shared across all users' backtests, built once per batch."""
 
-    def __init__(self, ratings_df: pd.DataFrame, movies_df: pd.DataFrame):
+    def __init__(self, ratings_df: pd.DataFrame, movies_df: pd.DataFrame, top_n: int = 10):
+        self.top_n = top_n  # recommendation budget each strategy gets when it is backtested
+        self.cf_k = max(5, top_n // 2)  # neighbours AND movies per neighbour (5 x 5 = 25 at the default)
         self._build_popularity(ratings_df, movies_df)
         self._build_content_based(movies_df)
         self._build_collaborative(ratings_df)
@@ -56,12 +58,12 @@ class _BacktestContext:
         # the `popularity` label was largely assigned by the all-zero tie-break
         # in select_best_strategy() rather than by winning on merit.
         if ratings_df is not None and not ratings_df.empty:
-            counts = ratings_df["movieId"].value_counts().head(10)
+            counts = ratings_df["movieId"].value_counts().head(self.top_n)
             self.top_popular_movies = {int(m) for m in counts.index}
             return
 
         if "popularity" in movies_df.columns and "movieId" in movies_df.columns:
-            top = movies_df.nlargest(10, "popularity")["movieId"]
+            top = movies_df.nlargest(self.top_n, "popularity")["movieId"]
             self.top_popular_movies = set(top)
             return
 
@@ -120,7 +122,7 @@ class _BacktestContext:
             sub[sub["userId"].isin(self.user_ids)]
             .sort_values("rating", ascending=False)
             .groupby("userId")["movieId"]
-            .apply(lambda s: set(s.head(5)))
+            .apply(lambda s: set(s.head(self.cf_k)))
             .to_dict()
         )
 
@@ -168,7 +170,7 @@ def _content_based_hit_rate(ctx: _BacktestContext, train_ratings: pd.DataFrame, 
         if row is not None:
             similarities[row] = -1.0
 
-    top_indices = np.argsort(similarities)[::-1][:10]
+    top_indices = np.argsort(similarities)[::-1][:getattr(ctx, 'top_n', 10)]
     top_movie_ids = set(ctx.tfidf_movie_ids[top_indices])
 
     hits = len(set(test_movie_ids) & top_movie_ids)
@@ -182,7 +184,7 @@ def _collaborative_hit_rate(ctx: _BacktestContext, user_id, test_movie_ids) -> f
     uidx = ctx.user_id_to_idx[user_id]
     sims = ctx.user_similarity[uidx].copy()
     sims[uidx] = -1.0  # exclude self
-    top_similar = np.argsort(sims)[::-1][:5]
+    top_similar = np.argsort(sims)[::-1][:getattr(ctx, 'cf_k', 5)]
 
     # Union of top-5 movies from 5 similar users could offer up to 25
     # candidates — an unfair advantage over content-based and popularity,
@@ -201,7 +203,7 @@ def _collaborative_hit_rate(ctx: _BacktestContext, user_id, test_movie_ids) -> f
     if not candidate_scores:
         return 0.0
 
-    top_movie_ids = set(sorted(candidate_scores, key=candidate_scores.get, reverse=True)[:10])
+    top_movie_ids = set(sorted(candidate_scores, key=candidate_scores.get, reverse=True)[:getattr(ctx, 'top_n', 10)])
 
     hits = len(set(test_movie_ids) & top_movie_ids)
     return hits / len(test_movie_ids)

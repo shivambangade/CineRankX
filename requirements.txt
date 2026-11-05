@@ -10,3 +10,7 @@ pyyaml
 imbalanced-learn
 psutil
 streamlit
+lightgbm
+xgboost
+catboost
+optuna

@@ -18,6 +18,25 @@ def _parse_time(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce")
 
 
+_CATALOG_CACHE: dict = {}
+
+
+def _catalog_tables(movies_df: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """(movieId -> genres, movieId -> popularity percentile), built once per catalog object.
+
+    Rebuilding them on every call dominated single-user inference time (a 27k-row merge and
+    rank per prediction); the cache key includes the catalog's identity and shape.
+    """
+    key = (id(movies_df), movies_df.shape)
+    if key not in _CATALOG_CACHE:
+        _CATALOG_CACHE.clear()
+        unique = movies_df.drop_duplicates("movieId")
+        genres = (unique.set_index("movieId")["genres"] if "genres" in unique.columns
+                  else pd.Series(dtype=object))
+        _CATALOG_CACHE[key] = (genres, _popularity_percentile(movies_df))
+    return _CATALOG_CACHE[key]
+
+
 def _popularity_percentile(movies_df: pd.DataFrame) -> pd.Series:
     """Catalog popularity percentile per movieId (higher = more popular), if a signal exists."""
     for col in ("vote_count", "popularity"):
@@ -99,10 +118,9 @@ def extract_profile_features(ratings_df: pd.DataFrame, movies_df: pd.DataFrame) 
         return pd.DataFrame()
 
     ratings = ratings_df.copy()
-    meta = movies_df[["movieId", *[c for c in ("genres",) if c in movies_df.columns]]]
-    rated = ratings.merge(meta.drop_duplicates("movieId"), on="movieId", how="left")
-    if "genres" not in rated.columns:
-        rated["genres"] = np.nan
+    genre_map, pct = _catalog_tables(movies_df)
+    rated = ratings.copy()
+    rated["genres"] = rated["movieId"].map(genre_map) if len(genre_map) else np.nan
 
     by_user = ratings.groupby("userId")["rating"]
     n_ratings = by_user.size()
@@ -117,15 +135,14 @@ def extract_profile_features(ratings_df: pd.DataFrame, movies_df: pd.DataFrame) 
     feats["log_num_ratings"] = np.log1p(n_ratings)
     feats = feats.join(_genre_features(rated, n_ratings))
 
-    pct = _popularity_percentile(movies_df)
     feats["niche_fraction"] = 0.0
     feats["mean_popularity_pct"] = 0.0
     if not pct.empty:
         rated_pct = rated["movieId"].map(pct)
         keyed = rated_pct.groupby(rated["userId"])
         feats["mean_popularity_pct"] = keyed.mean().reindex(feats.index).fillna(0.0)
-        feats["niche_fraction"] = (rated_pct < NICHE_PERCENTILE).where(rated_pct.notna()).groupby(
-            rated["userId"]).mean().reindex(feats.index).fillna(0.0)
+        niche = (rated_pct < NICHE_PERCENTILE).where(rated_pct.notna()).astype(float)
+        feats["niche_fraction"] = niche.groupby(rated["userId"]).mean().reindex(feats.index).fillna(0.0).astype(float)
 
     feats = feats.join(_time_features(ratings, feats.index))
     ordered = ["num_ratings", "avg_rating", "rating_std", "rating_min", "rating_max", "num_genres",

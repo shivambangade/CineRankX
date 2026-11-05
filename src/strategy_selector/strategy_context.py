@@ -62,8 +62,10 @@ class LiteContext(_BacktestContext):
 
     def cb_hit_rate(self, train: pd.DataFrame, test_ids) -> float:
         """Same quantity as strategy_labeler._content_based_hit_rate, via a precomputed normalised matrix."""
-        if self.content_model is not None:
-            return self.content_model.hit_rate(train, test_ids, self.top_n)
+        # getattr: contexts pickled before the content_model option existed lack the attribute.
+        content_model = getattr(self, "content_model", None)
+        if content_model is not None:
+            return content_model.hit_rate(train, test_ids, self.top_n)
         if self.tfidf_norm is None or len(test_ids) == 0 or train.empty:
             return 0.0
         profile = _build_cb_profile_vector(self, train)

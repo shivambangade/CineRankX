@@ -1,0 +1,5809 @@
+{
+ "app.py": {
+  "lines": 157,
+  "doc": "Streamlit UI for live or exported Module 4 recommendation output.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "load_engine",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "strategy_context",
+    "args": [],
+    "doc": "Reference population the strategy-aware features are computed against (None if untrained)."
+   },
+   {
+    "name": "engine_parts",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "_log_run",
+    "args": [
+     "user_id",
+     "k",
+     "weights",
+     "status"
+    ],
+    "doc": "Persist a run to the user store when it exists; never let logging break a run."
+   },
+   {
+    "name": "recommend",
+    "args": [
+     "user_id",
+     "k",
+     "weights"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "db_connection",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "load_report",
+    "args": [
+     "mtime",
+     "path"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/__init__.py": {
+  "lines": 1,
+  "doc": "",
+  "classes": [],
+  "functions": []
+ },
+ "src/benchmark/baseline.py": {
+  "lines": 44,
+  "doc": "FROZEN baseline strategy. Do not edit: any change creates a different benchmark.\n\nThis module is deliberately self-contained: it imports nothing from the ranking engine,\nstrategy selector or UI, so training, tuning or changing CineRankX cannot alter it.\nIt has no learnable parameters beyond counting the benchmark's training ratings.\n\n  recommend : non-personalised \"most popular\" -- movies ranked by number of TRAIN\n              ratings (ties broken by movieId), minus what the user has already seen.\n  predict   : item mean rating, shrunk toward the global mean with a fixed damping.\n\nrun_benchmark.py records a SHA-256 of this file next to the baseline's results and\nrefuses to continue if either the code or the measured numbers differ from the record.",
+  "classes": [
+   {
+    "name": "FrozenBaseline",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "train"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "recommend",
+      "args": [
+       "self",
+       "seen",
+       "k"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict",
+      "args": [
+       "self",
+       "movie_id"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "src/benchmark/cinerankx.py": {
+  "lines": 69,
+  "doc": "CineRankX as a benchmark strategy: EASE relevance -> six-objective re-ranking.\n\nEverything here is trained and tuned on the benchmark's TRAIN and VALIDATION splits\nonly. The frozen baseline never imports this module.",
+  "classes": [
+   {
+    "name": "CineRankXStrategy",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "bench",
+       "movies",
+       "ir_engine",
+       "n_items"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "l2"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "pools",
+      "args": [
+       "self",
+       "users",
+       "exclude",
+       "beta"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "recommend_many",
+      "args": [
+       "self",
+       "users",
+       "exclude",
+       "k",
+       "cohort",
+       "beta",
+       "weights"
+      ],
+      "doc": "weights=True -> tuned weights for the cohort; None -> plain relevance order (no re-rank)."
+     },
+     {
+      "name": "predict",
+      "args": [
+       "self",
+       "user_id",
+       "movie_id"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "weights_from",
+    "args": [
+     "vector"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/benchmark/config.py": {
+  "lines": 29,
+  "doc": "Benchmark settings from eval_config.yaml (the `benchmark:` block).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "load_benchmark_config",
+    "args": [
+     "path"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/benchmark/evaluate.py": {
+  "lines": 44,
+  "doc": "Strategy-agnostic evaluation: every strategy is scored on identical users and ground truth.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "exclusions",
+    "args": [
+     "bench",
+     "phase",
+     "users"
+    ],
+    "doc": "Items a strategy must not recommend: everything the user rated BEFORE the scored split."
+   },
+   {
+    "name": "evaluate_strategy",
+    "args": [
+     "bench",
+     "phase",
+     "cohort",
+     "recommend_many",
+     "predict",
+     "catalog_size",
+     "diversity_fn",
+     "novelty_fn",
+     "ks",
+     "limit"
+    ],
+    "doc": "Score one strategy on one cohort."
+   }
+  ]
+ },
+ "src/benchmark/metrics.py": {
+  "lines": 67,
+  "doc": "Ranking and rating-prediction metrics for the frozen benchmark.\n\n\"Accuracy\" in the dashboard is Hit Rate@K: the share of evaluated users for whom at\nleast one of the top-K recommendations is a held-out movie they rated >= the positive\nthreshold (4.0). It is stricter than it sounds (a user needs a hit among ~27,000\ntitles) and saturates for heavy users, which is why Precision, Recall, NDCG and MAP\nare always reported next to it.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "hit_rate",
+    "args": [
+     "rec",
+     "relevant",
+     "k"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "precision",
+    "args": [
+     "rec",
+     "relevant",
+     "k"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "recall",
+    "args": [
+     "rec",
+     "relevant",
+     "k"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "ndcg",
+    "args": [
+     "rec",
+     "relevant",
+     "k"
+    ],
+    "doc": "Binary-relevance NDCG@K with the ideal ranking limited to min(K, |relevant|) hits."
+   },
+   {
+    "name": "average_precision",
+    "args": [
+     "rec",
+     "relevant",
+     "k"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "rating_errors",
+    "args": [
+     "predicted",
+     "actual"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "summarize",
+    "args": [
+     "lists",
+     "positives",
+     "ks",
+     "catalog_size",
+     "diversity_fn",
+     "novelty_fn"
+    ],
+    "doc": "Mean metrics over users; every list is scored against the same positives."
+   }
+  ]
+ },
+ "src/benchmark/split.py": {
+  "lines": 141,
+  "doc": "Frozen benchmark: deterministic train/validation/test split and fixed evaluation cohorts.\n\nEvery rating is assigned to a split by a hash of (userId, movieId, seed), so the split\nis reproducible without stored state and independent of file order or sample size. The\ntest interactions are the ground truth for BOTH the frozen baseline and CineRankX;\nneither training nor tuning ever reads them.",
+  "classes": [
+   {
+    "name": "Benchmark",
+    "doc": "",
+    "methods": []
+   }
+  ],
+  "functions": [
+   {
+    "name": "uniform_hash",
+    "args": [
+     "users",
+     "items",
+     "seed"
+    ],
+    "doc": "splitmix64 of (user, item, seed) mapped to [0, 1); stable across machines and runs."
+   },
+   {
+    "name": "assign_splits",
+    "args": [
+     "users",
+     "items",
+     "config"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "load_interactions",
+    "args": [
+     "rating_csv",
+     "catalog_ids",
+     "config"
+    ],
+    "doc": "Ratings restricted to catalog movies, with split and a per-rating ordering key."
+   },
+   {
+    "name": "_eligible",
+    "args": [
+     "frame",
+     "config"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "build_benchmark",
+    "args": [
+     "frame",
+     "config"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "fingerprint",
+    "args": [
+     "bench"
+    ],
+    "doc": "Hash of the cohorts and test ground truth: detects any change to the benchmark."
+   },
+   {
+    "name": "get_benchmark",
+    "args": [
+     "config",
+     "rating_csv",
+     "catalog_ids",
+     "cache_dir",
+     "refresh",
+     "log"
+    ],
+    "doc": "Build the benchmark once and cache it; the cache is keyed by the benchmark settings."
+   }
+  ]
+ },
+ "src/benchmark/tuning.py": {
+  "lines": 83,
+  "doc": "Hyperparameter tuning on the VALIDATION split only (test interactions are never read).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_score",
+    "args": [
+     "res"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "tune_relevance",
+    "args": [
+     "s",
+     "catalog_size",
+     "log"
+    ],
+    "doc": "Pick the EASE regularisation and per-cohort popularity blend by validation NDCG@10."
+   },
+   {
+    "name": "_weight_candidates",
+    "args": [
+     "seed"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "tune_weights",
+    "args": [
+     "s",
+     "baseline",
+     "catalog_size",
+     "seed",
+     "log"
+    ],
+    "doc": "Objective weights: maximise validation NDCG@10 while staying at least as diverse as the baseline."
+   }
+  ]
+ },
+ "src/evaluation/__init__.py": {
+  "lines": 50,
+  "doc": "Evaluation suite: every KPI defined in eval_config.yaml.\n\nMetric names are the exact strings from that file (see metric_names.py), so a\nnumber in the final report and the code that produced it cannot drift apart.",
+  "classes": [],
+  "functions": []
+ },
+ "src/evaluation/metric_names.py": {
+  "lines": 89,
+  "doc": "The exact KPI name strings from eval_config.yaml.\n\nEvery metric this package reports is keyed by one of these constants rather\nthan an ad-hoc string, so a number in the report and the code that produced it\ncan never drift apart. `load_configured_metrics()` reads the config back and\n`missing_from()` checks a report actually covers it \u2014 the guard against a KPI\nbeing quietly dropped from the table.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "load_configured_metrics",
+    "args": [
+     "path"
+    ],
+    "doc": "Read the metric-name lists straight out of eval_config.yaml."
+   },
+   {
+    "name": "load_k_values",
+    "args": [
+     "path"
+    ],
+    "doc": "Read recommendation.k_values \u2014 the K's for Precision@K / Recall@K."
+   },
+   {
+    "name": "missing_from",
+    "args": [
+     "report",
+     "path"
+    ],
+    "doc": "Metric names in eval_config.yaml that a report does not contain."
+   }
+  ]
+ },
+ "src/evaluation/ml_metrics.py": {
+  "lines": 132,
+  "doc": "Classifier metrics \u2014 the \"machine_learning\" KPI group.\n\nThis is the single implementation of the strategy classifier's metrics.\n`StrategyClassifier.fit()` used to compute them inline; that logic now lives\nhere so the evaluation report and the classifier cannot drift apart, and so\nthe report never has to re-derive numbers the classifier already produced.\n\nDeliberately depends on nothing inside src/ beyond this file: the classifier\nimports it, so importing the classifier back would be a cycle.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "majority_baseline_accuracy",
+    "args": [
+     "y_train",
+     "y_test"
+    ],
+    "doc": "Accuracy of always predicting the most common TRAINING label."
+   },
+   {
+    "name": "roc_auc",
+    "args": [
+     "y_test",
+     "y_pred_proba",
+     "n_classes"
+    ],
+    "doc": "ROC-AUC, one-vs-rest for the multi-class case."
+   },
+   {
+    "name": "classification_metrics",
+    "args": [
+     "y_test",
+     "y_pred",
+     "y_pred_proba",
+     "class_names",
+     "y_train"
+    ],
+    "doc": "Compute every \"machine_learning\" KPI for one held-out evaluation."
+   },
+   {
+    "name": "to_report_names",
+    "args": [
+     "metrics"
+    ],
+    "doc": "Render computed metrics under the exact eval_config.yaml KPI names."
+   }
+  ]
+ },
+ "src/evaluation/recommendation_metrics.py": {
+  "lines": 331,
+  "doc": "Recommendation KPIs, driven off Module 4's final ranked output.\n\nGround truth is a held-out split of each user's own ratings: the ranker sees\nthe user's training ratings, and a recommendation counts as a hit if it appears\namong the items that user rated POSITIVELY in the held-out portion. Items the\nuser rated poorly are not hits \u2014 recommending a movie someone disliked is not\na success just because they happened to watch it.\n\nCold-Start Accuracy uses the documented definition: users with <= 5 ratings,\nscored against the popularity baseline's top-K on their held-out ratings.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "precision_at_k",
+    "args": [
+     "recommended",
+     "relevant",
+     "k"
+    ],
+    "doc": "Fraction of the top-K recommendations the user actually liked."
+   },
+   {
+    "name": "recall_at_k",
+    "args": [
+     "recommended",
+     "relevant",
+     "k"
+    ],
+    "doc": "Fraction of the user's liked held-out items that made the top-K."
+   },
+   {
+    "name": "f1_score_at_k",
+    "args": [
+     "precision",
+     "recall"
+    ],
+    "doc": "Harmonic mean of Precision@K and Recall@K."
+   },
+   {
+    "name": "average_precision",
+    "args": [
+     "recommended",
+     "relevant",
+     "k"
+    ],
+    "doc": "Average Precision for one user \u2014 the per-user term inside MAP."
+   },
+   {
+    "name": "mean_average_precision",
+    "args": [
+     "per_user_ap"
+    ],
+    "doc": "MAP: Average Precision averaged over users."
+   },
+   {
+    "name": "coverage",
+    "args": [
+     "all_recommended",
+     "catalog_size"
+    ],
+    "doc": "Coverage: share of the catalog that appears in ANY user's list."
+   },
+   {
+    "name": "intra_list_diversity",
+    "args": [
+     "recommended",
+     "stats"
+    ],
+    "doc": "Diversity: mean pairwise genre dissimilarity within one list."
+   },
+   {
+    "name": "novelty",
+    "args": [
+     "recommended",
+     "stats"
+    ],
+    "doc": "Novelty: mean self-information of the recommended items."
+   },
+   {
+    "name": "split_user_ratings",
+    "args": [
+     "ratings_df",
+     "test_fraction",
+     "random_state"
+    ],
+    "doc": "Per-user random hold-out split."
+   },
+   {
+    "name": "popularity_baseline_top_k",
+    "args": [
+     "train_ratings",
+     "movies_df",
+     "k"
+    ],
+    "doc": "Top-K most-rated movies in the training data \u2014 the cold-start reference."
+   },
+   {
+    "name": "evaluate_cold_start",
+    "args": [
+     "ranker",
+     "train_df",
+     "test_by_user",
+     "movies_df",
+     "user_ids",
+     "k",
+     "max_history",
+     "max_users"
+    ],
+    "doc": "Cold-Start Accuracy: hit-rate for users with <= `max_history` ratings."
+   },
+   {
+    "name": "evaluate_recommendations",
+    "args": [
+     "ranker",
+     "ratings_df",
+     "movies_df",
+     "user_ids",
+     "k_values",
+     "strategies",
+     "test_fraction",
+     "random_state"
+    ],
+    "doc": "Run Module 4 for each user and compute the recommendation KPI group."
+   }
+  ]
+ },
+ "src/evaluation/report.py": {
+  "lines": 230,
+  "doc": "Assembles and renders the full KPI report.\n\nEvery value is keyed by the exact metric-name string from eval_config.yaml, and\n`build_report()` refuses to return a report that is missing a configured KPI \u2014\nso a metric cannot silently drop out of the final results table.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "build_report",
+    "args": [
+     "search",
+     "recommendation",
+     "machine_learning",
+     "system",
+     "config_path",
+     "strict"
+    ],
+    "doc": "Collect the four KPI groups into one report keyed by exact metric names."
+   },
+   {
+    "name": "_fmt",
+    "args": [
+     "value",
+     "digits"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_rule",
+    "args": [
+     "char"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_header",
+    "args": [
+     "title"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "render",
+    "args": [
+     "report"
+    ],
+    "doc": "Render the report as the project's final results table."
+   }
+  ]
+ },
+ "src/evaluation/search_metrics.py": {
+  "lines": 180,
+  "doc": "Search KPIs \u2014 Precision@10, Recall@10, MRR, NDCG, Search Latency.\n\nRELEVANCE IS A PROXY, NOT GROUND TRUTH\n--------------------------------------\nThis project has no hand-labeled relevance judgements. Every number in this\nmodule rests on the documented substitute:\n\n    a search result is RELEVANT if it shares at least one genre or keyword\n    with the query.\n\nThat is a lenient, recall-oriented definition. Two consequences are stated\nwherever these metrics are reported rather than buried here:\n\n1. The relevant pool is enormous. A one-word genre query like \"action\" marks\n   thousands of the ~26.7k catalog movies relevant, so **Recall@10 is bounded\n   above by 10/|relevant| and is structurally near zero** \u2014 it measures the\n   catalog's breadth, not the engine's quality. `relevant_pool_size` is\n   reported alongside it so the figure stays interpretable.\n2. Precision@10 is correspondingly generous: matching one genre is a low bar,\n   so a high score here does not imply the results are *good*, only on-topic.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_tokenize",
+    "args": [
+     "raw"
+    ],
+    "doc": "Split a genre/keyword cell into a lowercase token set."
+   },
+   {
+    "name": "build_relevance_index",
+    "args": [
+     "movies_df"
+    ],
+    "doc": "Map movieId -> its genre+keyword token set, for proxy relevance."
+   },
+   {
+    "name": "is_relevant",
+    "args": [
+     "movie_id",
+     "query_tokens",
+     "relevance_index"
+    ],
+    "doc": "Apply the documented proxy to one result."
+   },
+   {
+    "name": "precision_at_k",
+    "args": [
+     "relevance_flags",
+     "k"
+    ],
+    "doc": "Precision@K: fraction of the top-K results that are relevant."
+   },
+   {
+    "name": "recall_at_k",
+    "args": [
+     "relevance_flags",
+     "total_relevant",
+     "k"
+    ],
+    "doc": "Recall@K: fraction of ALL relevant items that appear in the top-K."
+   },
+   {
+    "name": "reciprocal_rank",
+    "args": [
+     "relevance_flags"
+    ],
+    "doc": "1 / rank of the first relevant result; 0.0 if none are relevant."
+   },
+   {
+    "name": "ndcg_at_k",
+    "args": [
+     "relevance_flags",
+     "k",
+     "total_relevant"
+    ],
+    "doc": "NDCG@K with binary gains."
+   },
+   {
+    "name": "evaluate_search",
+    "args": [
+     "ir_engine",
+     "queries",
+     "movies_df",
+     "k",
+     "relevance_index"
+    ],
+    "doc": "Run every query through the IR engine and compute the search KPI group."
+   }
+  ]
+ },
+ "src/evaluation/system_metrics.py": {
+  "lines": 132,
+  "doc": "System KPIs \u2014 Response Time, Memory Usage, CPU Usage, Throughput.\n\nDeliberately generic: `measure()` instruments any callable rather than\nimporting the engines. That keeps this module free of a dependency cycle\n(strategy_selector imports src.evaluation.ml_metrics, so src.evaluation must\nnot import strategy_selector back) and lets the report instrument IR search,\nstrategy prediction and ranking through one code path.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "measure",
+    "args": [
+     "operation",
+     "n_calls",
+     "warmup",
+     "label"
+    ],
+    "doc": "Time `n_calls` invocations of `operation()` and report the system KPIs."
+   },
+   {
+    "name": "aggregate",
+    "args": [
+     "measurements"
+    ],
+    "doc": "Roll per-operation measurements into one system-level KPI row."
+   }
+  ]
+ },
+ "src/ingestion/__init__.py": {
+  "lines": 1,
+  "doc": "",
+  "classes": [],
+  "functions": []
+ },
+ "src/ingestion/build_dataset.py": {
+  "lines": 38,
+  "doc": "CLI entrypoint: loads raw MovieLens + TMDB data, joins them, cleans text,\nand caches the results to data/processed/ so downstream modules never\nrecompute the join.\n\nUsage: python -m src.ingestion.build_dataset",
+  "classes": [],
+  "functions": [
+   {
+    "name": "build",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ingestion/joiner.py": {
+  "lines": 70,
+  "doc": "Joins MovieLens movies to TMDB metadata via links.csv, and builds the\nper-movie raw text chunk (overview + genres + keywords) used by the IR\nengine (Module 2).\n\nTMDB 930K has no cast/crew data (no credits file, no cast/crew columns), so\ntext_chunk is overview + genres + keywords only \u2014 a deliberate scope decision,\nnot a placeholder. Its genres/keywords are plain comma-separated strings\n(unlike TMDB 5000's JSON list-of-dicts), so extraction is a simple split.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_split_names",
+    "args": [
+     "value"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "join_movielens_tmdb",
+    "args": [
+     "ml",
+     "tmdb"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ingestion/loaders.py": {
+  "lines": 31,
+  "doc": "Loaders for the raw MovieLens 20M and TMDB 930K CSVs.\n\nReads from newdata/movielens/ and newdata/tmdb/ (the actual on-disk folder\nnames for this dataset pair). MovieLens 20M's genome_scores.csv and\ngenome_tags.csv are intentionally not loaded here \u2014 unused by this pipeline.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "load_movielens",
+    "args": [
+     "base_dir"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "load_tmdb",
+    "args": [
+     "base_dir"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ingestion/text_cleaner.py": {
+  "lines": 31,
+  "doc": "NLTK-based text cleaning: lowercase, stop-word removal, stemming.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_ensure_nltk_data",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "clean_text",
+    "args": [
+     "text"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ir_engine/__init__.py": {
+  "lines": 8,
+  "doc": "Classical IR engine: TF-IDF + Trie autocomplete.",
+  "classes": [],
+  "functions": []
+ },
+ "src/ir_engine/ir_engine.py": {
+  "lines": 42,
+  "doc": "Unified IR engine combining TF-IDF search and Trie autocomplete.",
+  "classes": [
+   {
+    "name": "IREngine",
+    "doc": "Classical information retrieval engine with TF-IDF and Trie autocomplete.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "df"
+      ],
+      "doc": "Fit both TF-IDF and Trie on the movie dataset."
+     },
+     {
+      "name": "save",
+      "args": [
+       "self"
+      ],
+      "doc": "Persist both TF-IDF and Trie to disk."
+     },
+     {
+      "name": "load",
+      "args": [
+       "self"
+      ],
+      "doc": "Load persisted TF-IDF from disk. Trie cannot be persisted easily; re-fit if needed."
+     },
+     {
+      "name": "search",
+      "args": [
+       "self",
+       "query",
+       "limit"
+      ],
+      "doc": "Search for movies by text query (overview, genres, keywords)."
+     },
+     {
+      "name": "autocomplete",
+      "args": [
+       "self",
+       "prefix",
+       "limit"
+      ],
+      "doc": "Find movies by title prefix."
+     },
+     {
+      "name": "similar_to",
+      "args": [
+       "self",
+       "movie_id",
+       "limit"
+      ],
+      "doc": "Find movies most similar to a given movie."
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "src/ir_engine/tfidf_vectorizer.py": {
+  "lines": 123,
+  "doc": "TF-IDF vectorization and cosine similarity search over movie texts.",
+  "classes": [
+   {
+    "name": "TFIDFEngine",
+    "doc": "TF-IDF vectorizer and similarity search engine.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "df"
+      ],
+      "doc": "Fit TF-IDF vectorizer on text_chunk_clean column."
+     },
+     {
+      "name": "save",
+      "args": [
+       "self"
+      ],
+      "doc": "Persist vectorizer and matrix to disk."
+     },
+     {
+      "name": "load",
+      "args": [
+       "self"
+      ],
+      "doc": "Load vectorizer and matrix from disk. Return True if successful."
+     },
+     {
+      "name": "search",
+      "args": [
+       "self",
+       "query",
+       "limit"
+      ],
+      "doc": "Search for movies similar to query text. Return top-k results."
+     },
+     {
+      "name": "similar_to",
+      "args": [
+       "self",
+       "movie_id",
+       "limit"
+      ],
+      "doc": "Find movies similar to a given movie (excluding itself)."
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "src/ir_engine/trie.py": {
+  "lines": 54,
+  "doc": "Trie for prefix-based autocomplete over movie titles.",
+  "classes": [
+   {
+    "name": "TrieNode",
+    "doc": "Single node in a Trie.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "Trie",
+    "doc": "Prefix tree for autocomplete searches over movie titles.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "insert",
+      "args": [
+       "self",
+       "title",
+       "movie_id"
+      ],
+      "doc": "Insert a movie title into the Trie."
+     },
+     {
+      "name": "search",
+      "args": [
+       "self",
+       "prefix",
+       "limit"
+      ],
+      "doc": "Return movies whose titles start with prefix (case-insensitive)."
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "src/ranking_engine/__init__.py": {
+  "lines": 26,
+  "doc": "Multi-Objective Hybrid Ranking Engine: six weighted objectives.",
+  "classes": [],
+  "functions": []
+ },
+ "src/ranking_engine/candidates.py": {
+  "lines": 307,
+  "doc": "Candidate generation: blends Module 2 (IR) and Module 3 (strategy) output.\n\nModule 3's documented guidance (DATASET_MIGRATION.md) is that the predicted\nstrategy should be treated as a *weighted prior*, not a hard routing decision,\nand should degrade toward `collaborative` when classifier confidence is low.\nThat is implemented here: every candidate source always contributes, and the\npredicted strategy only shifts how much each one contributes.",
+  "classes": [
+   {
+    "name": "CandidateGenerator",
+    "doc": "Builds a per-user candidate pool from all three strategy sources.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df",
+       "ir_engine",
+       "stats",
+       "genre_gate_floor"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_popularity",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_collaborative",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_content_candidates",
+      "args": [
+       "self",
+       "user_ratings",
+       "limit"
+      ],
+      "doc": "IR engine (Module 2) similarity to the user's best-loved movies."
+     },
+     {
+      "name": "_collaborative_candidates",
+      "args": [
+       "self",
+       "user_id",
+       "user_ratings"
+      ],
+      "doc": "User-user KNN over the bounded user-item matrix."
+     },
+     {
+      "name": "candidates_for_seed",
+      "args": [
+       "self",
+       "seed_movie_id",
+       "limit"
+      ],
+      "doc": "Gated IR neighbours of one movie, as a ready-to-rank candidate pool."
+     },
+     {
+      "name": "generate",
+      "args": [
+       "self",
+       "user_id",
+       "strategy",
+       "confidence",
+       "pool_size"
+      ],
+      "doc": "Produce a blended candidate pool for one user."
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "strategy_source_weights",
+    "args": [
+     "strategy",
+     "confidence"
+    ],
+    "doc": "Blend the fallback prior toward the predicted strategy by confidence."
+   },
+   {
+    "name": "genre_overlap_gate",
+    "args": [
+     "candidate_id",
+     "seed_id",
+     "stats",
+     "floor"
+    ],
+    "doc": "Multiplier in [floor, 1.0] scaling a candidate's IR relevance by genre fit."
+   },
+   {
+    "name": "_normalize",
+    "args": [
+     "scores"
+    ],
+    "doc": "Min-max a source's raw scores into [0, 1] so sources are comparable."
+   }
+  ]
+ },
+ "src/ranking_engine/config.py": {
+  "lines": 105,
+  "doc": "Tunable weights for the six ranking objectives.\n\nWeights are read from eval_config.yaml (`ranking_objectives.weights`) and are\nnever hardcoded in the ranking logic \u2014 the ranker only ever asks this object\nfor a weight by name, so retuning is a config edit, not a code edit.",
+  "classes": [
+   {
+    "name": "RankingWeights",
+    "doc": "Weights for the six objectives, normalized to sum to 1.0.",
+    "methods": [
+     {
+      "name": "__post_init__",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "__getitem__",
+      "args": [
+       "self",
+       "objective"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "items",
+      "args": [
+       "self"
+      ],
+      "doc": "Iterate objectives in canonical OBJECTIVES order, not dict order."
+     },
+     {
+      "name": "with_overrides",
+      "args": [
+       "self"
+      ],
+      "doc": "Return a new RankingWeights with some weights replaced."
+     },
+     {
+      "name": "from_config",
+      "args": [
+       "cls",
+       "path"
+      ],
+      "doc": "Load weights from eval_config.yaml's ranking_objectives.weights block."
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "load_genre_gate_floor",
+    "args": [
+     "path"
+    ],
+    "doc": "Read ranking_objectives.genre_relevance_gate.floor from eval_config.yaml."
+   }
+  ]
+ },
+ "src/ranking_engine/ease.py": {
+  "lines": 79,
+  "doc": "EASE item-item linear model: CineRankX's personalised relevance source.\n\nEASE (Steck, 2019) is closed-form ridge regression of every item on all the others,\nfit on the binary user-item matrix X of the TRAINING interactions:\n\n    P = (X'X + lambda I)^-1,   B = -P / diag(P),   diag(B) = 0,   score(u) = x_u B\n\nIt is classical and explainable (a weighted item-to-item similarity), trains in seconds\non the 6,000 most-rated movies, and scores any user from their own ratings by fold-in --\nincluding a cold-start user with five ratings. Scores are turned into per-user percentile\nranks and blended with a popularity percentile; the blend weight (beta) is tuned on the\nvalidation split, and the multi-objective ranker still produces the final list.",
+  "classes": [
+   {
+    "name": "EaseModel",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "item_ids",
+       "weights",
+       "log_popularity"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "cls",
+       "train",
+       "n_items",
+       "l2"
+      ],
+      "doc": "Fit on a ratings frame [userId, movieId, rating]; every rating is an interaction."
+     },
+     {
+      "name": "user_matrix",
+      "args": [
+       "self",
+       "profiles",
+       "users"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "blended_scores",
+      "args": [
+       "self",
+       "user_rows",
+       "beta"
+      ],
+      "doc": "(users x items) = (1-beta) * popularity percentile + beta * per-user EASE percentile."
+     },
+     {
+      "name": "save",
+      "args": [
+       "self",
+       "path"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "load",
+      "args": [
+       "cls",
+       "path"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "src/ranking_engine/objectives.py": {
+  "lines": 185,
+  "doc": "The six ranking objectives, plus the catalog statistics they read from.\n\nTwo of the six \u2014 diversity and coverage \u2014 are *set-dependent*: their value for\na candidate depends on which items have already been selected, so they cannot\nbe precomputed per item. That is why the ranker selects greedily (see\nranker.py) instead of scoring everything once and sorting. The other four are\nper-item and are precomputed here.",
+  "classes": [
+   {
+    "name": "CatalogStats",
+    "doc": "Per-item statistics for the item-independent objectives, built once.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_genres",
+      "args": [
+       "movies_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_popularity_quality",
+      "args": [
+       "movies_df"
+      ],
+      "doc": "Bayesian-weighted rating, min-max scaled to [0, 1]."
+     },
+     {
+      "name": "_build_novelty",
+      "args": [
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": "Self-information -log2(p(item)), min-max scaled to [0, 1]."
+     },
+     {
+      "name": "genres",
+      "args": [
+       "self",
+       "movie_id"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "popularity_quality",
+      "args": [
+       "self",
+       "movie_id"
+      ],
+      "doc": "Objective 5: quality weighted by how many people actually voted."
+     },
+     {
+      "name": "novelty",
+      "args": [
+       "self",
+       "movie_id"
+      ],
+      "doc": "Objective 3: how far off the beaten path this item is."
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "_clean_genre",
+    "args": [
+     "token"
+    ],
+    "doc": "Strip list/quote punctuation off one genre token and lowercase it."
+   },
+   {
+    "name": "_minmax",
+    "args": [
+     "values"
+    ],
+    "doc": "Scale to [0, 1]. A constant array maps to all-zeros (no discrimination)."
+   },
+   {
+    "name": "diversity_score",
+    "args": [
+     "movie_id",
+     "selected_ids",
+     "similarity"
+    ],
+    "doc": "Objective 2: how unlike the already-selected items this candidate is."
+   },
+   {
+    "name": "coverage_score",
+    "args": [
+     "movie_id",
+     "covered_genres",
+     "stats"
+    ],
+    "doc": "Objective 4: how much of the catalog's genre space this item opens up."
+   }
+  ]
+ },
+ "src/ranking_engine/predictor.py": {
+  "lines": 68,
+  "doc": "Baseline rating predictor \u2014 the source for the predicted_rating objective.\n\nUses the classical bias baseline r_hat(u,i) = mu + b_u + b_i with damped\nbiases. It is deliberately the simplest defensible predictor: the project is\nscoped to explainable classical methods, and this model has the property that\nmatters most for ranking \u2014 it degrades gracefully. An unknown user falls back\nto mu + b_i (the item's own standing), and an unknown item to mu + b_u, so\ncold-start candidates still receive a sensible score instead of a hole.",
+  "classes": [
+   {
+    "name": "BaselinePredictor",
+    "doc": "Predicts a user's rating for an item from global/user/item biases.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "damping"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": "Fit global mean and damped user/item biases from a ratings frame."
+     },
+     {
+      "name": "predict",
+      "args": [
+       "self",
+       "user_id",
+       "movie_id"
+      ],
+      "doc": "Predicted rating on the original rating scale, clipped to [0.5, 5.0]."
+     },
+     {
+      "name": "predict_normalized",
+      "args": [
+       "self",
+       "user_id",
+       "movie_id"
+      ],
+      "doc": "Objective 6: the predicted rating rescaled to [0, 1]."
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "src/ranking_engine/ranker.py": {
+  "lines": 171,
+  "doc": "Multi-Objective Hybrid Ranking Engine (Module 4).\n\nRe-ranks a blended candidate pool on six weighted objectives. Selection is\n*greedy and sequential*, not score-then-sort: diversity and coverage are\ndefined relative to what has already been chosen, so an item's score is not\nfixed until the items above it are. At each step every remaining candidate is\nrescored against the current selection and the best-scoring one is taken.",
+  "classes": [
+   {
+    "name": "MultiObjectiveRanker",
+    "doc": "Ranks candidates on relevance, diversity, novelty, coverage,",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df",
+       "ir_engine",
+       "weights",
+       "predictor",
+       "stats",
+       "build_generator"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_similarity_lookup",
+      "args": [
+       "self",
+       "movie_ids"
+      ],
+      "doc": "Pairwise similarity among candidates, for the diversity objective."
+     },
+     {
+      "name": "rank",
+      "args": [
+       "self",
+       "user_id",
+       "k",
+       "strategy",
+       "confidence",
+       "candidates",
+       "weights",
+       "pool_size"
+      ],
+      "doc": "Return the top-k re-ranked recommendations for one user."
+     },
+     {
+      "name": "recommend",
+      "args": [
+       "self",
+       "user_id",
+       "k",
+       "strategy",
+       "confidence"
+      ],
+      "doc": "Convenience wrapper returning just the ranked movieIds."
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "_jaccard",
+    "args": [
+     "a",
+     "b"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/storage/__init__.py": {
+  "lines": 11,
+  "doc": "Local SQLite store for user histories and recommendation runs.",
+  "classes": [],
+  "functions": []
+ },
+ "src/storage/db.py": {
+  "lines": 84,
+  "doc": "SQLite schema and bulk ingestion for ratings, movies, per-user stats and run history.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "connect",
+    "args": [
+     "path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "db_ready",
+    "args": [
+     "path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_movie_frame",
+    "args": [
+     "movies",
+     "merged"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "build_database",
+    "args": [
+     "path",
+     "ratings_chunks",
+     "movies",
+     "merged"
+    ],
+    "doc": "(Re)build the store. ratings_chunks yields frames [userId, movieId, rating, timestamp]."
+   }
+  ]
+ },
+ "src/storage/runs.py": {
+  "lines": 37,
+  "doc": "Persisted recommendation runs: what was generated, when, with which engine and weights.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "record_run",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "list_runs",
+    "args": [
+     "conn",
+     "user_id",
+     "limit",
+     "offset"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/storage/users.py": {
+  "lines": 104,
+  "doc": "Server-side user queries: profile summary, paginated history, preferences, timelines.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "user_summary",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_filters",
+    "args": [
+     "user_id",
+     "search",
+     "genre",
+     "min_rating",
+     "max_rating"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "history_page",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": "One page of a user's ratings plus the total matching rows (filtering done in SQL)."
+   },
+   {
+    "name": "_joined",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "rating_distribution",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "genre_preferences",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": "Per-genre rating count and mean rating, most-watched first."
+   },
+   {
+    "name": "user_timeline",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": "Monthly activity, release-decade mix and language mix, all from real rows."
+   },
+   {
+    "name": "active_users",
+    "args": [
+     "conn",
+     "prefix",
+     "limit"
+    ],
+    "doc": "Users matching an ID prefix, most active first (served from user_stats)."
+   }
+  ]
+ },
+ "src/strategy_selector/__init__.py": {
+  "lines": 13,
+  "doc": "Adaptive ML Strategy Selection Engine: predicts best strategy per user.",
+  "classes": [],
+  "functions": []
+ },
+ "src/strategy_selector/classifier.py": {
+  "lines": 248,
+  "doc": "Strategy classifier: predict best-fit strategy per user.",
+  "classes": [
+   {
+    "name": "StrategyClassifier",
+    "doc": "ML classifier for per-user strategy selection.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "features_df",
+       "labels_df",
+       "use_smote"
+      ],
+      "doc": "Train classifier on features and strategy labels."
+     },
+     {
+      "name": "fit_full",
+      "args": [
+       "self",
+       "features_df",
+       "labels_df",
+       "estimator",
+       "use_smote"
+      ],
+      "doc": "Fit a chosen estimator on ALL given users (no hold-out) for deployment."
+     },
+     {
+      "name": "_resample_training_fold",
+      "args": [
+       "X_train",
+       "y_train",
+       "classes_present"
+      ],
+      "doc": "SMOTE-oversample the training fold. Never called before the split."
+     },
+     {
+      "name": "predict",
+      "args": [
+       "self",
+       "features_df"
+      ],
+      "doc": "Predict strategy for users given their profile features."
+     },
+     {
+      "name": "save",
+      "args": [
+       "self"
+      ],
+      "doc": "Persist model and label encoder to disk."
+     },
+     {
+      "name": "load",
+      "args": [
+       "self"
+      ],
+      "doc": "Load persisted model from disk. Return True if successful."
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "src/strategy_selector/config.py": {
+  "lines": 33,
+  "doc": "Strategy-selector settings, read from eval_config.yaml (never hardcoded in the logic).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "load_selector_config",
+    "args": [
+     "path"
+    ],
+    "doc": "Return the strategy_selector block merged over defaults (older configs still load)."
+   }
+  ]
+ },
+ "src/strategy_selector/content_model.py": {
+  "lines": 90,
+  "doc": "Content-based recommender with configurable representation, user profile and quality prior.\n\nEvery option is something the held-out experiment can switch independently:\n  vectorizer  \"base\"  TF-IDF over text_chunk_clean, 2,000 terms (the original strategy)\n              \"rich\"  TF-IDF with bigrams, sublinear tf and 20,000 terms\n  genre_weight        weight of a genre multi-hot block appended to the (normalised) text vector\n  profile     \"top20\"          rating-weighted sum of the user's 20 best-rated movies (original)\n              \"liked_centered\" weights = rating - user mean over ALL rated movies (dislikes push away)\n  quality_alpha       multiplies similarity by (quality percentile) ** alpha: a mild prior towards\n                      well-rated, well-voted movies (0 disables it)",
+  "classes": [
+   {
+    "name": "ContentModel",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "movies"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "profile_vector",
+      "args": [
+       "self",
+       "train"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "top_items",
+      "args": [
+       "self",
+       "train",
+       "top_n"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "hit_rate",
+      "args": [
+       "self",
+       "train",
+       "test_ids",
+       "top_n"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "_quality_percentile",
+    "args": [
+     "movies"
+    ],
+    "doc": "Bayesian-weighted rating percentile (votes shrunk towards the catalog mean)."
+   }
+  ]
+ },
+ "src/strategy_selector/dataset.py": {
+  "lines": 77,
+  "doc": "Build (and cache) the labelled training frame: sampled users -> features + backtest scores.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "sample_user_ids",
+    "args": [
+     "conn",
+     "n_users",
+     "seed",
+     "min_history",
+     "max_history"
+    ],
+    "doc": "Random users with enough (but not extreme) history, from the indexed user_stats table."
+   },
+   {
+    "name": "load_ratings",
+    "args": [
+     "conn",
+     "user_ids",
+     "catalog_ids"
+    ],
+    "doc": "Ratings of the sampled users, restricted to catalog movies (the strategies' universe)."
+   },
+   {
+    "name": "cache_path",
+    "args": [
+     "n_users",
+     "seed",
+     "config",
+     "cache_dir"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "build_labelled_frame",
+    "args": [
+     "conn",
+     "movies_df",
+     "n_users",
+     "seed",
+     "config",
+     "cache_dir",
+     "refresh",
+     "log"
+    ],
+    "doc": "Features (profile ratings only) + raw backtest scores per user, cached on disk."
+   }
+  ]
+ },
+ "src/strategy_selector/estimators.py": {
+  "lines": 27,
+  "doc": "Importable estimator factory: saved models reference it by module path, so it must not live in a script.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "make",
+    "args": [
+     "family"
+    ],
+    "doc": "Unfitted estimator (picklable: classes + keyword arguments only)."
+   }
+  ]
+ },
+ "src/strategy_selector/formulations.py": {
+  "lines": 186,
+  "doc": "Five ways to turn user features into a strategy choice, behind one sklearn-style interface.\n\nClasses are encoded alphabetically (0 collaborative, 1 content_based, 2 popularity) to match\nStrategyClassifier's label encoder; popularity wins score ties, exactly as the labeller does.\nEvery formulation exposes fit(X, scores), predict_proba(X) (n x 3 strategy preference) and\nclasses_, so any of them can be saved and used by StrategyClassifier unchanged.\n\n  multiclass   one classifier on the winning strategy\n  ovr          one binary \"is strategy s the winner?\" classifier per strategy\n  pairwise     three \"a beats b?\" classifiers (trained only where a and b differ), summed wins\n  regression   predict each strategy's expected hit-rate, choose the highest\n  ranking      LambdaRank over the three strategies of each user (strategy-specific features)",
+  "classes": [
+   {
+    "name": "_Constant",
+    "doc": "Stand-in for a binary classifier when the training labels contain only one outcome.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "p"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "_Base",
+    "doc": "",
+    "methods": [
+     {
+      "name": "predict",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "MulticlassForm",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "factory",
+       "margin_weight"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "X",
+       "scores"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "OneVsRestForm",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "factory"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "X",
+       "scores"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "PairwiseForm",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "factory"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "X",
+       "scores"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "RegressionForm",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "factory",
+       "temperature"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "X",
+       "scores"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_scores",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "RankingForm",
+    "doc": "LambdaRank where each (user, strategy) is a row: user features + strategy id + its inner score.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "params",
+       "temperature"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_expand",
+      "args": [
+       "X"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "X",
+       "scores"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_scores",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "winner",
+    "args": [
+     "scores"
+    ],
+    "doc": "Index of the best strategy per row; popularity (2) wins any tie for first place."
+   },
+   {
+    "name": "margin",
+    "args": [
+     "scores"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_fit",
+    "args": [
+     "factory",
+     "X",
+     "y",
+     "weights"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_fit_binary",
+    "args": [
+     "factory",
+     "X",
+     "y"
+    ],
+    "doc": "Fit a balanced binary classifier, or a constant when only one outcome occurs."
+   },
+   {
+    "name": "_softmax",
+    "args": [
+     "raw",
+     "temperature"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "decision_quality",
+    "args": [
+     "scores",
+     "chosen"
+    ],
+    "doc": "What the choice is worth: realised hit-rate of the chosen strategy vs fixed and oracle policies."
+   }
+  ]
+ },
+ "src/strategy_selector/holdout_labeler.py": {
+  "lines": 71,
+  "doc": "Leak-free strategy labels: backtest on a per-user holdout the profile never sees.\n\nEvery user's ratings are split once into a PROFILE part and a HOLDOUT part.\nFeatures come from the profile only; every strategy (and the shared popularity\nranking, similarity matrix and TF-IDF profile) is built from profile ratings\nonly; hit-rates are measured on the holdout. So the ratings that decide a\nuser's label are invisible to both the features and the strategies.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "split_profile_holdout",
+    "args": [
+     "ratings",
+     "fraction",
+     "seed"
+    ],
+    "doc": "Per-user random split; each user keeps at least one rating on each side."
+   },
+   {
+    "name": "label_holdout",
+    "args": [
+     "profile",
+     "holdout",
+     "movies_df",
+     "top_n",
+     "content_model"
+    ],
+    "doc": "Hit-rate of each strategy on the holdout; raw winner uses the legacy tie-break."
+   },
+   {
+    "name": "clean_labels",
+    "args": [
+     "labels",
+     "margin"
+    ],
+    "doc": "Drop users with no clear winner: all-zero scores, or top-two within `margin`."
+   }
+  ]
+ },
+ "src/strategy_selector/model_selection.py": {
+  "lines": 165,
+  "doc": "Cross-validated model comparison and one-shot held-out evaluation for the selector.\n\nRules enforced here: SMOTE only ever sees a training fold (resampling happens\ninside each fold, after the split); candidates are ranked by cross-validated\nmacro-F1 on the development users only; the held-out users are scored once, for\nthe chosen candidate, and never used to choose anything.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_lgbm",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "_scaled",
+    "args": [
+     "estimator"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "build_estimator",
+    "args": [
+     "kind",
+     "params"
+    ],
+    "doc": "Unfitted estimator for a candidate; 'step__param' keys configure pipeline steps."
+   },
+   {
+    "name": "fit_candidate",
+    "args": [
+     "kind",
+     "X",
+     "y",
+     "class_names",
+     "params"
+    ],
+    "doc": "Fit one candidate on a TRAINING fold (resampling it first when the candidate uses SMOTE)."
+   },
+   {
+    "name": "tune_candidate",
+    "args": [
+     "kind",
+     "X",
+     "y",
+     "folds",
+     "n_iter",
+     "seed"
+    ],
+    "doc": "Randomised search of a candidate's hyperparameters by CV macro-F1 (development users only)."
+   },
+   {
+    "name": "_proba",
+    "args": [
+     "model",
+     "X",
+     "n_classes"
+    ],
+    "doc": "Probabilities aligned to all classes (a fold may have trained without a rare class)."
+   },
+   {
+    "name": "_auc",
+    "args": [
+     "y_true",
+     "proba"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "cross_validate",
+    "args": [
+     "kind",
+     "X",
+     "y",
+     "class_names",
+     "folds",
+     "seed",
+     "params"
+    ],
+    "doc": "Stratified k-fold CV; metrics are per-fold means plus pooled out-of-fold AUC/confusion."
+   },
+   {
+    "name": "compare_candidates",
+    "args": [
+     "X",
+     "y",
+     "class_names",
+     "folds",
+     "kinds",
+     "tune",
+     "log"
+    ],
+    "doc": "Cross-validate (optionally tuned) candidates on development users; best = top mean macro-F1."
+   },
+   {
+    "name": "evaluate_holdout",
+    "args": [
+     "kind",
+     "X_dev",
+     "y_dev",
+     "X_hold",
+     "y_hold",
+     "class_names",
+     "params"
+    ],
+    "doc": "Train on all development users, then score the untouched held-out users exactly once."
+   }
+  ]
+ },
+ "src/strategy_selector/profile_features.py": {
+  "lines": 152,
+  "doc": "Extract user profile features from rating history (vectorized over all users).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_parse_time",
+    "args": [
+     "series"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_catalog_tables",
+    "args": [
+     "movies_df"
+    ],
+    "doc": "(movieId -> genres, movieId -> popularity percentile), built once per catalog object."
+   },
+   {
+    "name": "_popularity_percentile",
+    "args": [
+     "movies_df"
+    ],
+    "doc": "Catalog popularity percentile per movieId (higher = more popular), if a signal exists."
+   },
+   {
+    "name": "_genre_features",
+    "args": [
+     "rated",
+     "n_ratings"
+    ],
+    "doc": "Legacy genre columns plus per-genre affinity (share of a user's ratings in each genre)."
+   },
+   {
+    "name": "_time_features",
+    "args": [
+     "user_ratings",
+     "index"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "extract_profile_features",
+    "args": [
+     "ratings_df",
+     "movies_df"
+    ],
+    "doc": "Extract features for each user from their rating history and movie metadata."
+   }
+  ]
+ },
+ "src/strategy_selector/stats.py": {
+  "lines": 46,
+  "doc": "Small statistics helpers: bootstrap confidence intervals and paired significance tests.\n\nUsers are the unit of resampling (each user contributes one outcome), so intervals reflect\nhow much a result would move with a different sample of users, not of ratings.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "bootstrap_ci",
+    "args": [
+     "values",
+     "n_boot",
+     "level",
+     "seed"
+    ],
+    "doc": "(mean, low, high) of the mean of per-user values by percentile bootstrap."
+   },
+   {
+    "name": "paired_bootstrap",
+    "args": [
+     "a",
+     "b",
+     "n_boot",
+     "seed"
+    ],
+    "doc": "Mean of (a - b) over users with a 95% CI and a one-sided bootstrap p-value for 'a is not better'."
+   },
+   {
+    "name": "mcnemar_p",
+    "args": [
+     "correct_a",
+     "correct_b"
+    ],
+    "doc": "Exact McNemar p-value for 'two classifiers have equal error rates' on the same users."
+   },
+   {
+    "name": "proportion_ci",
+    "args": [
+     "successes",
+     "n",
+     "level"
+    ],
+    "doc": "Wilson interval for an accuracy-style proportion."
+   }
+  ]
+ },
+ "src/strategy_selector/strategy_context.py": {
+  "lines": 207,
+  "doc": "Strategy-aware features: a cheap backtest of each strategy on the user's OWN profile.\n\nThe label says which strategy won on a hidden holdout. The best available predictor of\nthat is how the same three strategies score when the user's visible ratings are split\nagain (profile', pseudo-holdout). These scores, plus popularity-head shares, are computed\nby one function used for training and for live prediction, so the two can never drift.\nOnly ratings passed in are read; the label holdout is never visible.",
+  "classes": [
+   {
+    "name": "LiteContext",
+    "doc": "Reference population for the inner backtest; no dense user-user matrix, so it is small.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "ratings_df",
+       "movies_df",
+       "top_n",
+       "content_model"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_cf_lite",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "cb_hit_rate",
+      "args": [
+       "self",
+       "train",
+       "test_ids"
+      ],
+      "doc": "Same quantity as strategy_labeler._content_based_hit_rate, via a precomputed normalised matrix."
+     },
+     {
+      "name": "engine_scores",
+      "args": [
+       "self",
+       "user_id",
+       "ratings"
+      ],
+      "doc": "What the CB and CF engines would actually output for this user: similarity strengths."
+     },
+     {
+      "name": "cf_hit_rate",
+      "args": [
+       "self",
+       "user_id",
+       "train",
+       "test_ids"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "inner_scores",
+    "args": [
+     "ctx",
+     "user_id",
+     "ratings",
+     "n_splits",
+     "fraction"
+    ],
+    "doc": "Mean content/collaborative/popularity hit-rates over seeded splits of ONE user's ratings."
+   },
+   {
+    "name": "build_features",
+    "args": [
+     "ratings",
+     "movies",
+     "ctx",
+     "n_splits",
+     "fraction"
+    ],
+    "doc": "Profile features + popularity-head shares + inner-backtest scores, one row per user."
+   },
+   {
+    "name": "save_context",
+    "args": [
+     "ctx",
+     "path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "load_context",
+    "args": [
+     "path"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/strategy_selector/strategy_labeler.py": {
+  "lines": 295,
+  "doc": "Backtest strategies to determine the best-fit strategy per user.\n\nPerformance note: hit-rates are computed against structures built ONCE for\nthe whole batch (global TF-IDF matrix, a sparse user-item matrix, one\nuser-user similarity matrix, one popularity ranking) rather than rebuilt from\nscratch inside the per-user loop. The original per-user version re-fit a\nTfidfVectorizer and rebuilt full rating-vector dicts for up to 500 users on\nevery iteration, which made it O(users \u00d7 movies) and timed out past ~1000\nusers; this version is O(users) after the shared setup.",
+  "classes": [
+   {
+    "name": "_BacktestContext",
+    "doc": "Structures shared across all users' backtests, built once per batch.",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "ratings_df",
+       "movies_df",
+       "top_n"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_popularity",
+      "args": [
+       "self",
+       "ratings_df",
+       "movies_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_content_based",
+      "args": [
+       "self",
+       "movies_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "_build_collaborative",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "select_best_strategy",
+    "args": [
+     "cb_score",
+     "cf_score",
+     "pop_score"
+    ],
+    "doc": "Pick the winning strategy from backtested hit-rates."
+   },
+   {
+    "name": "_build_cb_profile_vector",
+    "args": [
+     "ctx",
+     "train_ratings"
+    ],
+    "doc": "Build a user's content-based profile vector."
+   },
+   {
+    "name": "_content_based_hit_rate",
+    "args": [
+     "ctx",
+     "train_ratings",
+     "test_movie_ids"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_collaborative_hit_rate",
+    "args": [
+     "ctx",
+     "user_id",
+     "test_movie_ids"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_popularity_hit_rate",
+    "args": [
+     "ctx",
+     "test_movie_ids"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "label_users_with_best_strategy",
+    "args": [
+     "ratings_df",
+     "movies_df",
+     "test_fraction",
+     "n_splits",
+     "random_state"
+    ],
+    "doc": "Label each user with their best-performing strategy via backtesting."
+   }
+  ]
+ },
+ "src/strategy_selector/utility.py": {
+  "lines": 61,
+  "doc": "Utility-based strategy selection with an uncertainty-aware fallback.\n\nInstead of classifying a noisy \"winning strategy\" label, predict each strategy's expected\nhit-rate (its utility) for the user and pick the best. A non-fallback strategy is only\nchosen when its predicted utility beats the fallback's by more than `tau`: small predicted\ngaps are within the model's own uncertainty, so the reliable fallback (popularity) is used.\n\n    chosen = argmax_s ( utility_s - tau * [s != fallback] )\n\ntau is a plain, interpretable quantity (hit-rate points) tuned by cross-validation on\ndevelopment users only. predict_proba is a softmax over the same adjusted utilities, so the\nsaved model drops straight into StrategyClassifier (argmax == the rule above).",
+  "classes": [
+   {
+    "name": "UtilitySelector",
+    "doc": "",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "factory",
+       "tau",
+       "temperature",
+       "fallback"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "fit",
+      "args": [
+       "self",
+       "X",
+       "scores"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "utilities",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "adjusted",
+      "args": [
+       "self",
+       "X",
+       "tau"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "choose_tau",
+    "args": [
+     "utilities",
+     "scores",
+     "grid"
+    ],
+    "doc": "Pick the fallback margin that maximises realised hit-rate on out-of-fold utilities."
+   }
+  ]
+ },
+ "src/ui/__init__.py": {
+  "lines": 2,
+  "doc": "Recommendation output presentation helpers.",
+  "classes": [],
+  "functions": []
+ },
+ "src/ui/comparison_view.py": {
+  "lines": 66,
+  "doc": "Strategy Comparison: frozen baseline vs CineRankX on the fixed benchmark (reports/strategy_comparison.json).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_delta_badge",
+    "args": [
+     "after",
+     "base"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_panel",
+    "args": [
+     "title",
+     "icon_name",
+     "key",
+     "cohort",
+     "comp",
+     "headline"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "render_comparison",
+    "args": [
+     "comp"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ui/icons.py": {
+  "lines": 28,
+  "doc": "Feather icons (https://feathericons.com, MIT) as inline SVG strings.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "icon",
+    "args": [
+     "name",
+     "size"
+    ],
+    "doc": "Return an inline, decorative Feather SVG (default 2px stroke, round caps)."
+   }
+  ]
+ },
+ "src/ui/kpi_view.py": {
+  "lines": 133,
+  "doc": "Evaluation workspace rendered from reports/kpi_report.json (generate_kpi_report.py).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_num",
+    "args": [
+     "value",
+     "fmt"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_comparison",
+    "args": [
+     "label",
+     "system",
+     "reference",
+     "ref_name"
+    ],
+    "doc": "Two percentage bars plus a points-above/below badge; empty when either value is missing."
+   },
+   {
+    "name": "render_report",
+    "args": [
+     "report",
+     "last_run_ms",
+     "comparison"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ui/nav.py": {
+  "lines": 39,
+  "doc": "Navigation state shared by screens: section labels, deep links and the selected user.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "selected_user",
+    "args": [],
+    "doc": "Selected user from session state, falling back to the ?user= deep link."
+   },
+   {
+    "name": "set_user",
+    "args": [
+     "user_id"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "open_profile",
+    "args": [
+     "user_id"
+    ],
+    "doc": "Button callback: jump to a user's full profile."
+   },
+   {
+    "name": "sync_view",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ui/pages.py": {
+  "lines": 146,
+  "doc": "Overview and engines screens. Everything shown comes from loaded data, config or reports.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_pool_size",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "_funnel",
+    "args": [
+     "movies",
+     "ratings",
+     "shown"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_routing",
+    "args": [
+     "report"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "render_overview",
+    "args": [
+     "movies",
+     "ratings",
+     "classifier_ready",
+     "ranked",
+     "report",
+     "last_run_ms"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "render_engines",
+    "args": [
+     "report",
+     "ir_ready",
+     "classifier_ready",
+     "data_ready"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ui/profile.py": {
+  "lines": 158,
+  "doc": "User 360 screen: summary, history, preferences, past runs and current recommendations.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_picker",
+    "args": [
+     "conn"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_weights_from_session",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "_overview",
+    "args": [
+     "conn",
+     "user_id",
+     "summary"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_preferences",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_current",
+    "args": [
+     "conn",
+     "user_id",
+     "data_ready",
+     "load_engine",
+     "recommend"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "render_profile",
+    "args": [
+     "conn",
+     "data_ready",
+     "load_engine",
+     "recommend"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ui/profile_history.py": {
+  "lines": 91,
+  "doc": "Profile tabs backed by the store: paginated rating history and past recommendation runs.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "render_history",
+    "args": [
+     "conn",
+     "user_id",
+     "genres"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "render_runs",
+    "args": [
+     "conn",
+     "user_id"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ui/results.py": {
+  "lines": 87,
+  "doc": "Validate ranked output and summarize metrics available from that output.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "prepare_results",
+    "args": [
+     "frame"
+    ],
+    "doc": "Return a clean, rank-ordered copy of a Module 4 output frame."
+   },
+   {
+    "name": "output_kpis",
+    "args": [
+     "results"
+    ],
+    "doc": "These describe the displayed list, not held-out recommendation accuracy."
+   },
+   {
+    "name": "objective_label",
+    "args": [
+     "name"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "split_title",
+    "args": [
+     "title"
+    ],
+    "doc": "Return (name, year) from a MovieLens title like 'Toy Story (1995)'."
+   },
+   {
+    "name": "reason_for",
+    "args": [
+     "row",
+     "top_n"
+    ],
+    "doc": "Plain-language explanation built only from this row's real objective scores."
+   },
+   {
+    "name": "genres_lookup",
+    "args": [
+     "movies"
+    ],
+    "doc": "movieId -> genre list from the catalog's pipe-separated MovieLens genres."
+   }
+  ]
+ },
+ "src/ui/runner.py": {
+  "lines": 192,
+  "doc": "Recommendation runner screen: source, user, K, objective weights, ranked results.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "_default_weights",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "_reset_weights",
+    "args": [
+     "defaults"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_weights_panel",
+    "args": [
+     "defaults"
+    ],
+    "doc": "Render the six sliders plus a total/normalization indicator; return raw values."
+   },
+   {
+    "name": "_live_controls",
+    "args": [
+     "users",
+     "max_user"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "show_results",
+    "args": [
+     "results",
+     "context",
+     "genres"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_csv_source",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "render_runner",
+    "args": [
+     "data_ready",
+     "load_engine",
+     "recommend"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "src/ui/theme.py": {
+  "lines": 160,
+  "doc": "CineRankX visual system: porcelain canvas, orange/cobalt accents, hairline cards.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "apply_theme",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "header",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "card_title",
+    "args": [
+     "title",
+     "icon_name",
+     "sub"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "card",
+    "args": [
+     "key",
+     "title",
+     "icon_name",
+     "sub"
+    ],
+    "doc": "Bordered card that can hold native widgets as well as HTML."
+   },
+   {
+    "name": "card_html",
+    "args": [
+     "title",
+     "icon_name",
+     "body",
+     "sub"
+    ],
+    "doc": "Static card as one HTML string (for grids that contain no widgets)."
+   },
+   {
+    "name": "kpi",
+    "args": [
+     "label",
+     "value",
+     "unit",
+     "note"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "kpi_row",
+    "args": [
+     "items"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "meter",
+    "args": [
+     "label",
+     "value",
+     "accent",
+     "fmt"
+    ],
+    "doc": "HTML progress row for a value in [0, 1]."
+   }
+  ]
+ },
+ "scripts/analyze_selector.py": {
+  "lines": 128,
+  "doc": "Diagnose why the strategy classifier plateaus: labels, features, errors and attainable accuracy.\n\nUsage:  PYTHONPATH=. python scripts/analyze_selector.py [labelled_frame.csv]\nEverything is computed from the cached labelled frame (profile-only features + holdout backtest\nscores) and the saved model settings; nothing is tuned here and the held-out users are only\nused for reporting. Writes data/processed/selector_analysis.json.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "margins",
+    "args": [
+     "frame"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "noise_ceiling",
+    "args": [
+     "frame",
+     "draws"
+    ],
+    "doc": "Accuracy of an oracle that knows each user's TRUE hit-rates, scored against noisy labels."
+   },
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/build_movielens_only.py": {
+  "lines": 68,
+  "doc": "Build data/processed/ from MovieLens alone (no TMDB), for local demos.\n\nThe full pipeline (src.ingestion.build_dataset) needs the TMDB 2023 CSV, which\nrequires a Kaggle login. This builds the same artifacts from MovieLens 20M only:\noverview is empty, keywords come from user tags, and popularity/quality columns\nare derived from the ratings themselves.\n\nUsage:\n    PYTHONPATH=. python scripts/build_movielens_only.py [n_ratings]",
+  "classes": [],
+  "functions": [
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/build_user_db.py": {
+  "lines": 29,
+  "doc": "Build data/processed/cinerankx.db (ratings, movies, user stats, run history).\n\nStreams newdata/movielens/rating.csv in chunks, so the 20M-row file never sits in memory.\n\nUsage:\n    PYTHONPATH=. python scripts/build_user_db.py",
+  "classes": [],
+  "functions": [
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/compare_smote.py": {
+  "lines": 139,
+  "doc": "Before/after comparison: Module 3's classifier with and without SMOTE.\n\nBoth arms share one labeling pass, one feature frame and one train/test split\n(train_test_split is seeded at random_state=42 on identical inputs), so the\nONLY difference between them is SMOTE oversampling of the training fold.",
+  "classes": [],
+  "functions": []
+ },
+ "scripts/content_experiments.py": {
+  "lines": 102,
+  "doc": "Does a better content representation actually raise held-out hit rate?\n\nHypothesis: the content-based strategy is weak (hit rate ~0.016) because its representation\n(2,000-term TF-IDF, top-20-rated profile, no quality signal) is poor, not because content is\nuseless. Protocol: the label backtest (70% profile / 30% holdout per user, 30 recommendations);\nvariants are chosen on a DEVELOPMENT half of users and confirmed on a disjoint half.\n\nUsage: PYTHONPATH=. python scripts/content_experiments.py [n_users]\nWrites data/processed/content_experiments.json.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/generate_kpi_report.py": {
+  "lines": 186,
+  "doc": "End-to-end KPI report \u2014 the project's final results table.\n\nComputes every metric defined in eval_config.yaml from real data, across all\nfour engines, and refuses to finish if any configured KPI is missing.\n\nUsage:\n    PYTHONPATH=. python scripts/generate_kpi_report.py [n_ratings] [n_users]\n\nRequires the Module 1/2/3 artifacts in data/processed/ (run the ingestion\npipeline and the Module 2/3 verification scripts first).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "log",
+    "args": [
+     "message"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_plain",
+    "args": [
+     "value"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/label_experiments.py": {
+  "lines": 96,
+  "doc": "Compare label-generation methods: reliability, class mix and what a perfect model could score.\n\nFor each configuration the SAME users are labelled twice with independent random holdouts\n(seeds 42 and 43). Agreement between the two labelings measures how repeatable a label is;\nan oracle ceiling is estimated by simulation (see analyze_selector.noise_ceiling). The\nuncertainty-aware variant additionally marks a user \"indistinct\" when the best strategy does not\nbeat the runner-up by a one-sided 95% margin (binomial standard error on the holdout size), so\nuncertainty is represented instead of being turned into a confident label.\n\nUsage: PYTHONPATH=. python scripts/label_experiments.py [n_users]\nWrites data/processed/label_experiments.json.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "labels_for",
+    "args": [
+     "ratings",
+     "movies",
+     "top_n",
+     "frac",
+     "seed"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "classify",
+    "args": [
+     "frame",
+     "uncertainty_aware"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "oracle_ceiling",
+    "args": [
+     "frame",
+     "draws"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/run_benchmark.py": {
+  "lines": 161,
+  "doc": "Reproducible strategy comparison: frozen baseline vs. CineRankX on one fixed benchmark.\n\nUsage:\n    PYTHONPATH=. python scripts/run_benchmark.py [--refresh-split] [--retune] [--skip-before]\n\n1. Builds (or loads) the frozen split and cohorts from eval_config.yaml `benchmark:`.\n2. Scores the FROZEN baseline; compares it with the stored record and aborts on any drift.\n3. Tunes CineRankX on the validation split only (or reuses data/benchmark/cinerankx_params.json).\n4. Scores the previous CineRankX pipeline (\"before\") and the improved one (\"after\") on the\n   untouched test split, overall and cold-start, and writes reports/strategy_comparison.json.\n5. Retrains the EASE model on all ratings for the live app and saves the tuned blend.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "code_hash",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "run_baseline",
+    "args": [
+     "bench",
+     "catalog_size",
+     "stats"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "freeze_baseline",
+    "args": [
+     "bench",
+     "results"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "before_pipeline",
+    "args": [
+     "bench",
+     "movies",
+     "ir",
+     "stats",
+     "predictor"
+    ],
+    "doc": "The previous CineRankX pipeline (IR + user-kNN + popularity candidates), unchanged."
+   },
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/selector_experiments.py": {
+  "lines": 266,
+  "doc": "Systematic strategy-selector experiments on the FULL labelled population (no user dropped).\n\nUsage:  PYTHONPATH=. python scripts/selector_experiments.py [n_users] [--trials N] [--deploy]\n\nProtocol (fixed before any result was seen):\n  * every user is kept, labels are the labeller's argmax with the documented popularity tie-break;\n  * 80/20 stratified development/held-out split (seed 42); the held-out users are never used to\n    tune, select or early-stop anything;\n  * Optuna tunes each model family by 3-fold macro-F1 on development users only;\n  * all candidates (families x formulations x ensembles) get the same 5-fold CV on development users;\n  * the winner is the highest CV macro-F1 (ties: higher CV realised hit-rate); held-out numbers are\n    then reported for it, and shown for the other candidates only for transparency.\n--deploy refits the winner on all users and saves it where StrategyClassifier loads from.\nWrites data/processed/selector_experiments.json.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "space",
+    "args": [
+     "family",
+     "t"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "evaluate",
+    "args": [
+     "proba",
+     "scores"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "cv_oof",
+    "args": [
+     "builder",
+     "X",
+     "scores",
+     "folds"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "tune",
+    "args": [
+     "family",
+     "X",
+     "scores",
+     "trials"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "deploy_winner",
+    "args": [
+     "builder",
+     "name",
+     "X",
+     "scores",
+     "X_dev",
+     "s_dev",
+     "X_hold",
+     "s_hold",
+     "keep",
+     "config",
+     "table",
+     "extras"
+    ],
+    "doc": "Refit the selected candidate on every user, save it for the app, and write the KPI-facing results."
+   },
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/selector_phase2.py": {
+  "lines": 221,
+  "doc": "Strategy selection, evaluated on TWO separate objectives, with uncertainty and significance.\n\n  Objective A (classification): predict each user's labelled winning strategy.\n  Objective B (recommendation value): realised hit-rate of the strategy the selector chooses,\n                                       against always-popularity and an oracle.\n\nProtocol: all users kept; stratified 80/20 development/held-out split (seed 42); every model gets the\nsame 5-fold CV on development users; selection uses CV only; held-out users are scored once per model\nfor reporting. CIs are user-level bootstraps; significance uses paired bootstraps and McNemar.\n\nUsage: PYTHONPATH=. python scripts/selector_phase2.py [n_users] [--deploy] [--tag NAME]\nWrites data/processed/selector_phase2_<tag>.json (tag defaults to the content variant).",
+  "classes": [
+   {
+    "name": "Reweighted",
+    "doc": "Wraps a fitted probabilistic model with per-class multipliers (threshold optimisation).",
+    "methods": [
+     {
+      "name": "__init__",
+      "args": [
+       "self",
+       "model",
+       "weights"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict_proba",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "predict",
+      "args": [
+       "self",
+       "X"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "per_user_value",
+    "args": [
+     "scores",
+     "chosen"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "oof_utilities",
+    "args": [
+     "factory",
+     "X",
+     "scores",
+     "folds"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "tune_thresholds",
+    "args": [
+     "proba",
+     "y",
+     "grid"
+    ],
+    "doc": "Per-class probability multipliers that maximise macro-F1 on OUT-OF-FOLD predictions."
+   },
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/smote_seed_robustness.py": {
+  "lines": 119,
+  "doc": "Multi-seed robustness check for the SMOTE result.\n\nThe headline comparison rests on ONE train/test split, where content_based's\ntrue positives moved 5 -> 13 out of 70. Those are small counts, so this script\nrepeats the identical two-arm comparison across many seeds to separate a real\neffect from split luck.\n\nDeliberately standalone: it replicates the classifier's fit path rather than\nmodifying it, so production code keeps its fixed random_state=42.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "run_arm",
+    "args": [
+     "seed",
+     "use_smote"
+    ],
+    "doc": "One arm at one seed. Split first; SMOTE only ever sees the train fold."
+   }
+  ]
+ },
+ "scripts/smote_vs_class_weight.py": {
+  "lines": 112,
+  "doc": "Does SMOTE do anything that cheaper class_weight tuning does not?\n\nThe 10-seed result shows SMOTE lifting content_based RECALL while leaving\nROC-AUC flat. Flat AUC means the probability ranking did not improve \u2014 the\nmodel is not discriminating better, it is just pushing the decision boundary\ntoward the minority class. If that reading is right, simply scaling up the\nminority class weights should reproduce the same effect without synthetic\ndata or an extra dependency. This tests exactly that.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "run",
+    "args": [
+     "seed",
+     "mode",
+     "boost"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/train_strategy_selector.py": {
+  "lines": 147,
+  "doc": "Train and honestly evaluate the Adaptive Strategy Selector.\n\nPipeline: sample users (fixed seed) -> per-user profile/holdout split -> features from the\nprofile only (incl. strategy-aware inner backtest scores) + strategy backtest on the holdout\n-> drop ambiguous labels -> hold out 20% of users untouched -> tuned 5-fold CV comparison of\neight model families on the rest (selected by macro-F1) -> one-shot held-out evaluation\n-> refit on every labelled user and save model + context.\n\nUsage:\n    PYTHONPATH=. python scripts/train_strategy_selector.py [n_users] [--refresh] [--no-tune] [--reliability]\n\n--reliability re-labels the same users with a second independent holdout and reports how often\nthe two labels agree: the ceiling any classifier can reach on these labels.\nWrites data/processed/strategy_eval.json (read by scripts/generate_kpi_report.py).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "label_reliability",
+    "args": [
+     "conn",
+     "movies",
+     "n_users",
+     "config"
+    ],
+    "doc": "Agreement between labels from two independent holdouts of the same users."
+   },
+   {
+    "name": "inference_latency",
+    "args": [
+     "clf",
+     "ctx",
+     "movies",
+     "conn",
+     "config",
+     "n"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "main",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "scripts/verify_ir_engine.py": {
+  "lines": 52,
+  "doc": "Verification script for IR engine on real dataset.",
+  "classes": [],
+  "functions": []
+ },
+ "scripts/verify_ranking_engine.py": {
+  "lines": 191,
+  "doc": "Verification script for the Multi-Objective Hybrid Ranking Engine (Module 4).",
+  "classes": [],
+  "functions": [
+   {
+    "name": "show",
+    "args": [
+     "ranked",
+     "weights",
+     "note"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "spread",
+    "args": [
+     "ranked"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "horror_like",
+    "args": [
+     "ranked"
+    ],
+    "doc": "Titles sharing NO genre with the Toy Story seed."
+   }
+  ]
+ },
+ "scripts/verify_strategy_selector.py": {
+  "lines": 116,
+  "doc": "Verification script for Strategy Selector on real MovieLens data.",
+  "classes": [],
+  "functions": []
+ },
+ "tests/test_benchmark.py": {
+  "lines": 138,
+  "doc": "Tests for the frozen benchmark: deterministic split, metrics, frozen baseline, EASE, evaluation.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "synthetic_frame",
+    "args": [
+     "n_users",
+     "n_items",
+     "per_user",
+     "seed"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_split_is_deterministic_and_independent_of_row_order",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_split_changes_with_seed_only",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_benchmark_cohorts_disjoint_cold_truncated_and_test_never_in_train",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_exclusions_never_use_test_items",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_ranking_metrics_hand_computed",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_baseline_is_frozen_independent_and_deterministic",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_baseline_does_not_change_when_cinerankx_is_retrained",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_ease_beats_popularity_on_structured_data_with_same_ground_truth",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_evaluation.py": {
+  "lines": 604,
+  "doc": "Tests for the evaluation suite (all four KPI groups from eval_config.yaml).",
+  "classes": [
+   {
+    "name": "TestMetricNames",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_implemented_names_match_config_exactly",
+      "args": [
+       "self"
+      ],
+      "doc": "The whole point of metric_names.py: no drift from eval_config.yaml."
+     },
+     {
+      "name": "test_all_four_groups_present",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_k_values_load_from_config",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_missing_from_detects_a_dropped_metric",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_missing_from_empty_when_complete",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestSearchMetrics",
+    "doc": "",
+    "methods": [
+     {
+      "name": "movies_df",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_relevance_index_parses_all_three_column_formats",
+      "args": [
+       "self",
+       "movies_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_is_relevant_needs_only_one_shared_token",
+      "args": [
+       "self",
+       "movies_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_precision_at_k_divides_by_k_not_result_count",
+      "args": [
+       "self"
+      ],
+      "doc": "A short result list must not score a perfect Precision@10."
+     },
+     {
+      "name": "test_precision_at_k_all_relevant",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_precision_at_k_none_relevant",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_recall_at_k_against_total_relevant",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_recall_at_k_zero_when_nothing_relevant_exists",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_reciprocal_rank_first_position",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_reciprocal_rank_third_position",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_reciprocal_rank_none_relevant",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_ndcg_perfect_ranking_is_one",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_ndcg_rewards_relevant_items_ranked_higher",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_ndcg_zero_when_nothing_relevant",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_ndcg_ideal_accounts_for_small_relevant_pool",
+      "args": [
+       "self"
+      ],
+      "doc": "With only 2 relevant items, finding both at the top is perfect."
+     },
+     {
+      "name": "test_evaluate_search_reports_every_configured_metric",
+      "args": [
+       "self",
+       "movies_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_evaluate_search_states_the_relevance_proxy",
+      "args": [
+       "self",
+       "movies_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_evaluate_search_handles_no_queries",
+      "args": [
+       "self",
+       "movies_df"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestRecommendationMetrics",
+    "doc": "",
+    "methods": [
+     {
+      "name": "stats",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_precision_at_k",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_recall_at_k",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_recall_zero_when_user_has_no_relevant_items",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_f1_is_harmonic_mean",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_average_precision_rewards_early_hits",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_average_precision_perfect_when_all_top_slots_hit",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_average_precision_denominator_capped_at_k",
+      "args": [
+       "self"
+      ],
+      "doc": "A perfect top-2 must score 1.0 even when the user liked 10 items."
+     },
+     {
+      "name": "test_map_averages_over_users",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_coverage_counts_distinct_items_across_users",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_coverage_zero_for_empty_catalog",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_diversity_lower_for_same_genre_list",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_diversity_zero_for_single_item",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_novelty_reads_catalog_stats",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_novelty_zero_for_empty_list",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_split_gives_every_user_train_and_test",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_split_is_deterministic",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_split_never_puts_a_users_whole_history_in_test",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_popularity_baseline_prefers_observed_rating_counts",
+      "args": [
+       "self"
+      ],
+      "doc": "TMDB `popularity` disagrees with what MovieLens users actually rate."
+     },
+     {
+      "name": "test_popularity_baseline_falls_back_to_tmdb_without_ratings",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestRecommendationEndToEnd",
+    "doc": "",
+    "methods": [
+     {
+      "name": "catalog_and_ratings",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_reports_every_configured_recommendation_metric",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_precision_recall_f1_are_keyed_by_k",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_all_rates_are_valid_probabilities",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_never_recommends_a_training_item",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": "The held-out evaluation must not re-serve items from the train split."
+     },
+     {
+      "name": "test_empty_user_list_returns_zero_users",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestMLMetrics",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_perfect_predictions",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_confusion_matrix_shape_and_labels",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_per_class_supports_sum_to_test_size",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_majority_baseline_from_training_labels",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_baseline_absent_when_no_training_labels_given",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_roc_auc_computed_for_multiclass",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_matches_module3_classifier_output",
+      "args": [
+       "self"
+      ],
+      "doc": "The refactor must reproduce what StrategyClassifier.fit() reports."
+     }
+    ]
+   },
+   {
+    "name": "TestSystemMetrics",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_reports_every_configured_metric",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_response_time_and_throughput_are_consistent",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_memory_usage_is_a_positive_rss_figure",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_cpu_marked_unreliable_for_tiny_windows",
+      "args": [
+       "self"
+      ],
+      "doc": "A sub-50ms window cannot yield a meaningful CPU figure."
+     },
+     {
+      "name": "test_cpu_measured_for_a_long_enough_window",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_aggregate_reports_every_configured_metric",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_aggregate_memory_is_peak_not_sum",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_aggregate_of_nothing_is_empty",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestReport",
+    "doc": "",
+    "methods": [
+     {
+      "name": "_full_groups",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_build_report_covers_every_configured_kpi",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_build_report_rejects_a_missing_kpi",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_non_strict_mode_allows_gaps",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_render_includes_every_metric_name",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_render_labels_all_four_groups",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestColdStart",
+    "doc": "MovieLens has no natural cold-start users, so the cohort is simulated.",
+    "methods": [
+     {
+      "name": "catalog_and_ratings",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_simulates_when_no_natural_cold_users_exist",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_uses_natural_cohort_when_one_exists",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_accuracy_and_baseline_are_probabilities",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_cold_start_reported_in_full_evaluation",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_truncation_leaves_other_users_histories_intact",
+      "args": [
+       "self",
+       "catalog_and_ratings"
+      ],
+      "doc": "Only the cohort is truncated \u2014 a cold SYSTEM is a different measurement."
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "tests/test_formulations.py": {
+  "lines": 87,
+  "doc": "Tests for the strategy-choice formulations and the decision-quality metric.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "synthetic",
+    "args": [
+     "n",
+     "seed"
+    ],
+    "doc": "Strategy scores really depend on two features, plus noise."
+   },
+   {
+    "name": "test_winner_breaks_ties_towards_popularity_and_margin_is_gap",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_every_formulation_learns_the_signal_and_returns_valid_probabilities",
+    "args": [
+     "builder"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_pairwise_ignores_users_where_two_strategies_tie",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_ranking_expansion_keeps_three_consecutive_rows_per_user",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_decision_quality_hand_computed",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_fitted_formulation_can_be_pickled_for_deployment",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_ingestion.py": {
+  "lines": 103,
+  "doc": "",
+  "classes": [],
+  "functions": [
+   {
+    "name": "test_load_movielens",
+    "args": [
+     "tmp_path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_load_tmdb",
+    "args": [
+     "tmp_path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_join_movielens_tmdb_builds_text_chunk",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_join_drops_unmatched_movies",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_clean_text_lowercases_removes_stopwords_and_stems",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_clean_text_handles_empty_input",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_ir_engine.py": {
+  "lines": 192,
+  "doc": "Tests for the IR engine: TF-IDF, Trie, and similarity search.",
+  "classes": [
+   {
+    "name": "TestTrie",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_insert_and_search_basic",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_case_insensitive",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_empty_prefix_returns_empty",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_nonexistent_prefix",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_respects_limit",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_insert_ignores_empty_titles",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestTFIDFEngine",
+    "doc": "",
+    "methods": [
+     {
+      "name": "sample_df",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_fit_creates_matrix",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_returns_results",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_respects_limit",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_similar_to_returns_similar_movies",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_similar_to_nonexistent_movie_returns_empty",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_requires_fit",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_save_and_load",
+      "args": [
+       "self",
+       "sample_df",
+       "tmp_path",
+       "monkeypatch"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestIREngine",
+    "doc": "",
+    "methods": [
+     {
+      "name": "sample_df",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_fit_initializes_both_tfidf_and_trie",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_search_works",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_autocomplete_works",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_similar_to_works",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_autocomplete_case_insensitive",
+      "args": [
+       "self",
+       "sample_df"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "tests/test_ranking_engine.py": {
+  "lines": 539,
+  "doc": "Tests for the Multi-Objective Hybrid Ranking Engine (Module 4).",
+  "classes": [
+   {
+    "name": "TestRankingWeights",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_loads_all_six_objectives_from_config",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_weights_are_normalized_to_one",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_relative_proportions_survive_normalization",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_missing_objective_rejected",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_unknown_objective_rejected",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_negative_weight_rejected",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_all_zero_weights_rejected",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_with_overrides_does_not_mutate_original",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_items_returns_canonical_order",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestCatalogStats",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_genres_parsed_and_lowercased",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_stringified_list_genres_parsed",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": "movies_merged.csv stores genre_names as \"['Animation', 'Comedy']\"."
+     },
+     {
+      "name": "test_genre_parsing_is_format_agnostic",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": "The same three genres must parse identically from all three formats."
+     },
+     {
+      "name": "test_pipe_separated_genres_supported",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_popularity_quality_shrinks_low_vote_movies",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_novelty_rewards_rarely_rated_items",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_novelty_uses_vote_count_for_unrated_items",
+      "args": [
+       "self",
+       "movies_df"
+      ],
+      "doc": "Items absent from the ratings sample must still be ranked against"
+     },
+     {
+      "name": "test_all_scores_in_unit_range",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_unknown_movie_returns_neutral_values",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestDiversityObjective",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_first_pick_is_maximally_diverse",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_near_duplicate_scores_low",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_uses_max_not_mean_similarity",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestCoverageObjective",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_fully_new_genres_score_one",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_fully_covered_genres_score_zero",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_partial_overlap_scores_fraction",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_item_without_genres_scores_zero",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestBaselinePredictor",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_predictions_stay_on_the_rating_scale",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_item_bias_orders_well_and_poorly_rated_items",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_unknown_user_falls_back_to_item_standing",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_unknown_item_falls_back_to_user_standing",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_normalized_prediction_in_unit_range",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_empty_ratings_does_not_crash",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestStrategySourceWeights",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_full_confidence_concentrates_on_predicted_strategy",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_chance_confidence_falls_back_to_prior",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_low_confidence_degrades_toward_collaborative",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_no_strategy_returns_prior",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_unknown_strategy_returns_prior",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_weights_always_sum_to_one",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestCandidateGenerator",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_excludes_movies_the_user_already_rated",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_relevance_normalized_to_unit_range",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_respects_pool_size",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_sources_are_recorded",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_unknown_user_still_gets_candidates",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_strategy_shifts_the_blend",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestMultiObjectiveRanker",
+    "doc": "",
+    "methods": [
+     {
+      "name": "ranker",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_returns_k_results_with_all_objective_columns",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_ranks_are_sequential_from_one",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_no_duplicate_recommendations",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_never_recommends_already_rated_movies",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_all_objective_scores_in_unit_range",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_score_equals_weighted_sum_of_objectives",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_first_pick_has_maximal_diversity_and_coverage",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_k_larger_than_pool_returns_what_exists",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_empty_candidate_pool_returns_empty_frame",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_weight_override_changes_the_ordering",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_pure_novelty_ranks_the_rarest_item_first",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_diversity_weight_spreads_genres",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": "Turning diversity/coverage up must widen the genre mix, not narrow it."
+     },
+     {
+      "name": "test_recommend_returns_plain_id_list",
+      "args": [
+       "self",
+       "ranker"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestGenreRelevanceGate",
+    "doc": "The gate that stops keyword-only TF-IDF matches riding a high-rated seed.",
+    "methods": [
+     {
+      "name": "stats",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_identical_genres_are_not_penalized",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_zero_overlap_is_gated_to_the_floor",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_partial_overlap_scales_between_floor_and_one",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_floor_of_one_disables_the_gate",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_floor_of_zero_fully_suppresses_zero_overlap",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_missing_genre_metadata_is_never_penalized",
+      "args": [
+       "self",
+       "ratings_df"
+      ],
+      "doc": "An unknown genre is not evidence of a mismatch."
+     },
+     {
+      "name": "test_gate_is_symmetric",
+      "args": [
+       "self",
+       "stats"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_gate_floor_loads_from_config",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_gate_floor_falls_back_when_block_absent",
+      "args": [
+       "self",
+       "tmp_path"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_out_of_range_floor_rejected",
+      "args": [
+       "self",
+       "tmp_path"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestGateInCandidateGeneration",
+    "doc": "",
+    "methods": [
+     {
+      "name": "seed_ratings",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_gate_demotes_the_keyword_only_match",
+      "args": [
+       "self",
+       "movies_df",
+       "seed_ratings"
+      ],
+      "doc": "Ungated, the horror movie wins; gated, the genre-matched one does."
+     },
+     {
+      "name": "test_gate_does_not_change_genre_matched_candidates",
+      "args": [
+       "self",
+       "movies_df",
+       "seed_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_candidates_for_seed_returns_gated_pool",
+      "args": [
+       "self",
+       "movies_df",
+       "seed_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_candidates_for_seed_without_ir_engine_is_empty",
+      "args": [
+       "self",
+       "movies_df",
+       "seed_ratings"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_cold_start_is_unaffected_by_the_gate",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": "A user with no history has no seeds, so the gate cannot fire."
+     },
+     {
+      "name": "test_collaborative_and_popularity_sources_are_not_gated",
+      "args": [
+       "self",
+       "movies_df",
+       "ratings_df"
+      ],
+      "doc": "Only IR candidates have a seed; the other two sources must be untouched."
+     }
+    ]
+   }
+  ],
+  "functions": [
+   {
+    "name": "movies_df",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "ratings_df",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_selector_pipeline.py": {
+  "lines": 156,
+  "doc": "Tests for the richer features, leak-free labelling, margin cleaning and CV evaluation.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "movies",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "ratings",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_new_features_present_and_legacy_columns_kept",
+    "args": [
+     "movies",
+     "ratings"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_popularity_recency_and_burst_features",
+    "args": [
+     "movies",
+     "ratings"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_features_use_only_the_ratings_given",
+    "args": [
+     "movies",
+     "ratings"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_profile_holdout_split_is_disjoint_and_per_user",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_holdout_labels_never_use_holdout_ratings",
+    "args": [
+     "movies"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_clean_labels_drops_zero_and_ambiguous_users",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_margin_comes_from_config",
+    "args": [
+     "tmp_path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "_synthetic",
+    "args": [
+     "n_per_class",
+     "seed"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_cross_validation_reports_baseline_and_beats_it_on_separable_data",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_cross_validation_on_noise_does_not_beat_chance",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_cross_validation_shrinks_folds_for_rare_classes_and_smote_stays_in_fold",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_compare_and_holdout_use_separate_users",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_strategy_context.py": {
+  "lines": 84,
+  "doc": "Tests for the strategy-aware features (inner backtest) and their train/serve consistency.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "world",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_fast_content_score_matches_the_reference_implementation",
+    "args": [
+     "world"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_inner_scores_are_deterministic_and_bounded",
+    "args": [
+     "world"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_a_users_own_profile_is_never_their_own_neighbour",
+    "args": [
+     "world"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_features_use_only_the_ratings_passed_in",
+    "args": [
+     "world"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_training_and_serving_build_identical_columns",
+    "args": [
+     "world",
+     "tmp_path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_missing_context_file_returns_none",
+    "args": [
+     "tmp_path"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_strategy_selector.py": {
+  "lines": 741,
+  "doc": "Tests for the Adaptive ML Strategy Selection Engine.",
+  "classes": [
+   {
+    "name": "TestProfileFeatures",
+    "doc": "",
+    "methods": [
+     {
+      "name": "sample_data",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_extract_features_basic",
+      "args": [
+       "self",
+       "sample_data"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_extract_features_user1",
+      "args": [
+       "self",
+       "sample_data"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_extract_features_includes_genre_diversity",
+      "args": [
+       "self",
+       "sample_data"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_extract_features_empty_input",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_extract_features_includes_genre_identity_features",
+      "args": [
+       "self",
+       "sample_data"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_top_genre_share_and_entropy_for_focused_user",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_genre_entropy_for_eclectic_user",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_focused_user_has_lower_entropy_than_eclectic_user",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestSelectBestStrategy",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_clear_winner_content_based",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_clear_winner_collaborative",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_all_zero_tie_defaults_to_popularity",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_content_and_collaborative_tie_excludes_popularity",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_popularity_can_win_outright",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestPopularityWeighting",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_prefers_observed_rating_counts_over_tmdb_popularity",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_tmdb_popularity_used_only_when_no_ratings_exist",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_no_ratings_and_no_metadata_yields_nothing_popular",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_fallback_ranks_broad_support_above_single_rating",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestCollaborativeCandidateBudget",
+    "doc": "",
+    "methods": [
+     {
+      "name": "test_caps_candidates_at_ten_not_twenty_five",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestContentBasedProfileWeighting",
+    "doc": "",
+    "methods": [
+     {
+      "name": "_build_ctx",
+      "args": [
+       "self",
+       "movie_ids",
+       "vectors"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_profile_weights_by_rating",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_profile_ignores_movies_beyond_the_cap",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_no_trained_movie_in_catalog_returns_none",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestStrategyLabeler",
+    "doc": "",
+    "methods": [
+     {
+      "name": "sample_data",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_label_users_returns_best_strategy",
+      "args": [
+       "self",
+       "sample_data"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_label_users_includes_scores",
+      "args": [
+       "self",
+       "sample_data"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_label_users_handles_few_ratings",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestStrategyClassifier",
+    "doc": "",
+    "methods": [
+     {
+      "name": "sample_features_and_labels",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_fit",
+      "args": [
+       "self",
+       "sample_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_fit_reports_majority_baseline",
+      "args": [
+       "self",
+       "sample_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_fit_reports_per_class_metrics",
+      "args": [
+       "self",
+       "sample_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_fit_reports_missing_classes",
+      "args": [
+       "self",
+       "sample_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_fit_flags_absent_class",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_holdout_predictions_match_confusion_matrix_accuracy",
+      "args": [
+       "self",
+       "sample_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_predict",
+      "args": [
+       "self",
+       "sample_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_requires_fit",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_classifier_save_and_load",
+      "args": [
+       "self",
+       "sample_features_and_labels",
+       "tmp_path",
+       "monkeypatch"
+      ],
+      "doc": ""
+     }
+    ]
+   },
+   {
+    "name": "TestSMOTEOversampling",
+    "doc": "SMOTE must only ever touch the training fold, after the split.",
+    "methods": [
+     {
+      "name": "imbalanced_features_and_labels",
+      "args": [
+       "self"
+      ],
+      "doc": "40 users, deliberately imbalanced: 30 collaborative / 8 popularity / 2 content_based."
+     },
+     {
+      "name": "test_smote_balances_the_training_fold",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_smote_does_not_change_the_test_set",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": "The strongest no-leak signal: identical holdout users either way."
+     },
+     {
+      "name": "test_holdout_users_are_all_real_and_never_synthetic",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": "Every evaluated user must be a genuine row from the input frame."
+     },
+     {
+      "name": "test_smote_row_count_matches_train_fold_not_full_dataset",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": "rows_before must equal the TRAIN fold size, not the whole dataset."
+     },
+     {
+      "name": "test_majority_baseline_uses_real_distribution_not_resampled",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": "The baseline must describe the real class mix, not the balanced one."
+     },
+     {
+      "name": "test_smote_off_by_default",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_smote_skipped_when_minority_too_small_to_interpolate",
+      "args": [
+       "self"
+      ],
+      "doc": "A skip must be reported as a skip, never silently pass as a SMOTE run."
+     },
+     {
+      "name": "test_smote_helper_leaves_data_untouched_when_skipped",
+      "args": [
+       "self"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_k_neighbors_lowered_for_small_minority",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": ""
+     },
+     {
+      "name": "test_smote_model_still_predicts_real_class_names",
+      "args": [
+       "self",
+       "imbalanced_features_and_labels"
+      ],
+      "doc": ""
+     }
+    ]
+   }
+  ],
+  "functions": []
+ },
+ "tests/test_ui_results.py": {
+  "lines": 81,
+  "doc": "Unit tests for output displayed by the recommendation UI.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "ranked",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_prepares_and_sorts_ranked_output",
+    "args": [
+     "ranked"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_kpis_describe_displayed_list",
+    "args": [
+     "ranked"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_rejects_invalid_rows",
+    "args": [
+     "ranked",
+     "column",
+     "value"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_rejects_missing_objectives",
+    "args": [
+     "ranked"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_rejects_duplicate_movies",
+    "args": [
+     "ranked"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_empty_output_has_no_kpis",
+    "args": [
+     "ranked"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_split_title_extracts_year",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_reason_uses_top_objectives",
+    "args": [
+     "ranked"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_genres_lookup_handles_missing_catalog",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_user_store.py": {
+  "lines": 80,
+  "doc": "Tests for the SQLite user store: lookup, history paging/filtering, run history.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "conn",
+    "args": [
+     "tmp_path"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_summary_and_unknown_user",
+    "args": [
+     "conn"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_history_paginates_filters_and_sorts",
+    "args": [
+     "conn"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_history_is_scoped_to_user_and_safe_sort",
+    "args": [
+     "conn"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_preferences_and_timeline",
+    "args": [
+     "conn"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_active_users_prefix",
+    "args": [
+     "conn"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_run_history_round_trip",
+    "args": [
+     "conn"
+    ],
+    "doc": ""
+   }
+  ]
+ },
+ "tests/test_utility_stats.py": {
+  "lines": 77,
+  "doc": "Tests for bootstrap statistics, the utility selector with fallback, and the content model.",
+  "classes": [],
+  "functions": [
+   {
+    "name": "test_bootstrap_ci_brackets_the_mean_and_shrinks_with_sample_size",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_paired_bootstrap_detects_a_real_gain_and_not_noise",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_mcnemar_and_wilson_interval",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "_scores",
+    "args": [
+     "n",
+     "seed"
+    ],
+    "doc": ""
+   },
+   {
+    "name": "test_utility_selector_uses_fallback_when_gap_is_below_tau",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_choose_tau_prefers_the_margin_with_best_realised_hit_rate",
+    "args": [],
+    "doc": ""
+   },
+   {
+    "name": "test_content_model_recommends_similar_unseen_items_and_scores_hits",
+    "args": [],
+    "doc": ""
+   }
+  ]
+ }
+}
